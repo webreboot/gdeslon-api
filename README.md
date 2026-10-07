@@ -8,7 +8,7 @@ PHP-клиент для API вебмастеров партнёрской сет
 > [issues](https://github.com/webreboot/gdeslon-api/issues).
 
 > Ранняя версия (0.1.0-dev): доступны категории товаров, магазины (с кэшем), поиск товаров, заказы, приём postback,
-> заявки на потерянные заказы, купоны и CLI `gdeslon`. MCP-сервер — в работе.
+> заявки на потерянные заказы, купоны, CLI `gdeslon` и MCP-сервер для AI-агентов.
 
 - PHP 8.1+, только расширения `curl`, `json`, `libxml`, `simplexml`, `xmlreader` — без сторонних зависимостей.
 - Ответы API превращаются в типизированные объекты; ошибки — в исключения с понятным текстом и без токенов.
@@ -353,6 +353,20 @@ vendor/bin/gdeslon orders --days=7 --state=confirmed,paid
 заявки (4 — не повторять, 5 — уже есть). `lost-orders submit` создаёт реальную заявку и спрашивает подтверждение.
 Приём postback — только в коде (`PostbackReceiver`), в CLI его нет. Все команды, опции, поля JSON и предупреждения
 для скриптов — в [docs/cli.md](docs/cli.md).
+
+## MCP-сервер для AI-агентов
+
+`gdeslon mcp` — локальный MCP-сервер (stdio): агент (Claude Desktop, Claude Code и другие) получает инструменты
+`get_categories`, `list_merchants`, `search_offers`, `list_orders`, `list_coupons` и другие. Только чтение.
+
+```bash
+claude mcp add --transport stdio gdeslon -- php /path/to/project/vendor/bin/gdeslon mcp --env-file=/home/me/.config/gdeslon.env
+```
+
+Ключи — из `--env-file` или окружения сервера, в ответах агенту они маскируются. Токен в ссылках купонов скрыт
+(`/ck/***/`), настоящие ссылки — только флагом `--reveal-links`. Поддерживаются MCP `2024-11-05`…`2025-11-25`
+(рукопожатие) и `2026-07-28`. Подключение в Claude Desktop, инструменты, аргументы, теги ошибок и предупреждения —
+в [docs/mcp.md](docs/mcp.md).
 
 ## Кэш
 

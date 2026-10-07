@@ -22,6 +22,8 @@ use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Interface\Cli\MissingCredentialsException;
 use Webreboot\GdeSlon\Interface\Cli\OutputFailedException;
 use Webreboot\GdeSlon\Interface\Cli\UsageException;
+use Webreboot\GdeSlon\Interface\Mcp\JsonRpcError;
+use Webreboot\GdeSlon\Interface\Mcp\NotFoundException;
 use Webreboot\GdeSlon\Interface\Postback\InvalidPostbackException;
 use Webreboot\GdeSlon\Interface\Postback\PostbackAuthenticationException;
 use Webreboot\GdeSlon\Interface\Postback\PostbackException;
@@ -61,6 +63,8 @@ final class ExceptionHierarchyTest extends TestCase
             UsageException::class,
             MissingCredentialsException::class,
             OutputFailedException::class,
+            JsonRpcError::class,
+            NotFoundException::class,
         ] as $class) {
             yield $class => [$class];
         }

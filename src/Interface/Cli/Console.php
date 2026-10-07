@@ -81,6 +81,25 @@ final class Console
         }
     }
 
+    /**
+     * Значения секретов в тексте — звёздочками (для данных, которые пишутся не через out()/err()).
+     */
+    public function mask(string $text): string
+    {
+        return SecretMasker::maskValues($text, $this->secrets);
+    }
+
+    /**
+     * Сырые stdin и stdout для протокола (MCP): без маски и замены управляющих символов — маску протокол ставит на
+     * значения до кодирования JSON, а stdout принадлежит только ему.
+     *
+     * @return array{resource, resource}
+     */
+    public function protocolStreams(): array
+    {
+        return [$this->in, $this->out];
+    }
+
     public function revealStdout(): void
     {
         $this->revealStdout = true;

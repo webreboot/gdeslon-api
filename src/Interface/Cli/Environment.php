@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Interface\Cli;
 
+use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+
 /**
  * Переменные окружения CLI: ключи API (только отсюда, не из аргументов) и каталог кэша. Окружение процесса важнее
  * файла `--env-file`; пустое значение — «не задано».
@@ -70,6 +73,39 @@ final class Environment
         $local = $this->system('LOCALAPPDATA');
 
         return $local === null ? null : rtrim($local, '/\\') . '\\gdeslon-api\\cache';
+    }
+
+    /**
+     * Ключи, которые нужны команде (CLI) или инструменту (MCP), заданы и годятся для Config. Без запросов к API.
+     *
+     * @throws MissingCredentialsException
+     */
+    public function assertCredentials(Credentials $credentials): void
+    {
+        $token = $this->token();
+        if ($token !== null && ($credentials === Credentials::Token || $credentials === Credentials::TokenOptional) && preg_match('/^[\x21-\x7E]+\z/', $token) !== 1) {
+            throw new MissingCredentialsException('GDESLON_API_TOKEN задан неверно: допустимы только печатные символы ASCII без пробелов');
+        }
+        if ($credentials === Credentials::Token && $token === null) {
+            throw new MissingCredentialsException(
+                'Нужен токен XML API: задайте переменную окружения GDESLON_API_TOKEN (или --env-file). Токен — https://gdeslon.ru/api_settings/xml',
+            );
+        }
+        if ($credentials !== Credentials::SalesKeys) {
+            return;
+        }
+        $userId = $this->userId();
+        $apiKey = $this->apiKey();
+        if ($userId === null || $apiKey === null) {
+            throw new MissingCredentialsException(
+                'Нужны ключи API по продажам: задайте вместе GDESLON_USER_ID и GDESLON_API_KEY (или --env-file). Ключи — https://gdeslon.ru/api_settings/orders',
+            );
+        }
+        try {
+            new Config(userId: $userId, apiKey: $apiKey);
+        } catch (InvalidArgumentException $e) {
+            throw new MissingCredentialsException('Ключи не приняты: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     private function get(string $name): ?string

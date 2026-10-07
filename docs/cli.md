@@ -138,6 +138,13 @@ gdeslon lost-orders submit --merchant=2573 --order-number=GS123L --order-date=20
 ссылки — с `--reveal-links` (в stderr — предупреждение). Не публикуйте такие ссылки как есть. Рядом со ссылкой
 показывайте маркировку рекламы (`ad_marking`, erid).
 
+### `mcp`
+
+MCP-сервер для AI-агентов: читает JSON-RPC из stdin, отвечает в stdout, пока stdin открыт. Опции — общие
+(`--env-file`, `--cache-dir`, `--no-cache`, `--timeout`) и `--reveal-links`; `--format` не используется. Коды выхода:
+0 — stdin закрыт, 1 — клиент закрыл stdout, 2 — неверный вызов. Подключение, инструменты и протокол — в
+[docs/mcp.md](mcp.md).
+
 ## Вывод
 
 Данные — в stdout, сообщения и ошибки — в stderr. Таблицы — для людей, их вид может меняться. Для скриптов —

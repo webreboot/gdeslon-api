@@ -53,6 +53,7 @@ final class Application
             new Command\CouponsListCommand(),
             new Command\CouponShowCommand(),
             new Command\CouponKindsCommand(),
+            new Command\McpCommand(),
         ] as $command) {
             $commands[$command->name()] = $command;
         }
@@ -117,14 +118,14 @@ final class Application
 
             $environment = new Environment($this->env, $input->has('env-file') ? EnvFile::load((string) $input->value('env-file')) : []);
             $console = $console->withSecrets($environment->secrets());
-            $this->assertCredentials($command->credentials(), $environment);
+            $environment->assertCredentials($command->credentials());
 
             $config = $this->config($command->credentials(), $environment, $timeout);
             $cacheDir = $input->flag('no-cache') ? null : $input->value('cache-dir') ?? $environment->cacheDirectory();
             $cache = $cacheDir === null ? null : new FileCacheStore($cacheDir);
 
             $factory = $this->factory;
-            $context = new CommandContext(static fn (): GdeSlon => $factory($config, $cache), $console, $this->clock, $format === 'json');
+            $context = new CommandContext(static fn (): GdeSlon => $factory($config, $cache), $console, $this->clock, $format === 'json', $environment);
 
             return $command->execute($input, $arguments, $context);
         } catch (\Throwable $error) {
@@ -212,24 +213,6 @@ final class Application
         $command = $this->commands[$words[0]] ?? $this->commands[$words[0] . ' list'] ?? null;
 
         return $command === null ? null : [$command, 1];
-    }
-
-    private function assertCredentials(Credentials $credentials, Environment $environment): void
-    {
-        $token = $environment->token();
-        if ($token !== null && $credentials !== Credentials::None && $credentials !== Credentials::SalesKeys && preg_match('/^[\x21-\x7E]+\z/', $token) !== 1) {
-            throw new MissingCredentialsException('GDESLON_API_TOKEN задан неверно: допустимы только печатные символы ASCII без пробелов');
-        }
-        if ($credentials === Credentials::Token && $environment->token() === null) {
-            throw new MissingCredentialsException(
-                'Нужен токен XML API: задайте переменную окружения GDESLON_API_TOKEN (или --env-file). Токен — https://gdeslon.ru/api_settings/xml',
-            );
-        }
-        if ($credentials === Credentials::SalesKeys && ($environment->userId() === null || $environment->apiKey() === null)) {
-            throw new MissingCredentialsException(
-                'Нужны ключи API по продажам: задайте вместе GDESLON_USER_ID и GDESLON_API_KEY (или --env-file). Ключи — https://gdeslon.ru/api_settings/orders',
-            );
-        }
     }
 
     /**

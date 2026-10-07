@@ -87,6 +87,25 @@ final class CatalogNormalizer
     }
 
     /**
+     * Короткая форма для списков (MCP): полная форма магазина — 5–9 КБ, список целиком не помещается в контекст агента.
+     *
+     * @return array<string, mixed>
+     */
+    public static function merchantSummary(Merchant $merchant): array
+    {
+        return [
+            'id' => $merchant->id()->value(),
+            'name' => $merchant->name(),
+            'domain' => $merchant->domain(),
+            'url' => $merchant->url(),
+            'commission_summary' => $merchant->commissionSummary(),
+            'categories' => array_map(self::merchantCategory(...), $merchant->categories()),
+            'affiliate_link' => $merchant->affiliateLink(),
+            'ad_marking' => $merchant->adMarking(),
+        ];
+    }
+
+    /**
      * @return array{merchants: list<array<string, mixed>>, skipped: list<string>}
      */
     public static function merchantList(MerchantList $list): array

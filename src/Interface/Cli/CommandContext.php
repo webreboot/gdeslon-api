@@ -9,7 +9,7 @@ use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Interface\Cli\Output\JsonOutput;
 
 /**
- * Всё, что нужно команде: фасад SDK (создаётся при первом обращении), консоль, часы, формат вывода.
+ * Всё, что нужно команде: фасад SDK (создаётся при первом обращении), консоль, часы, формат вывода, окружение (ключи).
  *
  * @internal
  */
@@ -27,6 +27,7 @@ final class CommandContext
         public readonly Console $console,
         public readonly Clock $clock,
         public readonly bool $json,
+        public readonly Environment $environment = new Environment([]),
     ) {
     }
 
