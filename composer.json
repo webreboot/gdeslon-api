@@ -1,0 +1,79 @@
+{
+    "name": "webreboot/gdeslon-api",
+    "description": "PHP SDK, CLI и MCP-сервер для API вебмастеров партнёрской сети «Где Слон?» (gdeslon.ru)",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "gdeslon",
+        "affiliate",
+        "cpa",
+        "api",
+        "sdk",
+        "yml",
+        "postback",
+        "mcp"
+    ],
+    "homepage": "https://github.com/webreboot/gdeslon-api",
+    "authors": [
+        {
+            "name": "webreboot",
+            "homepage": "https://github.com/webreboot"
+        },
+        {
+            "name": "Nikita Kobylin",
+            "email": "webreboot@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/webreboot/gdeslon-api/issues",
+        "source": "https://github.com/webreboot/gdeslon-api"
+    },
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-libxml": "*",
+        "ext-simplexml": "*",
+        "ext-xmlreader": "*"
+    },
+    "require-dev": {
+        "nyholm/psr7": "^1.8",
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^10.5",
+        "psr/http-message": "^1.1 || ^2.0",
+        "psr/simple-cache": "^3.0"
+    },
+    "suggest": {
+        "psr/http-message": "Приём postback из PSR-7-запроса фреймворка через PostbackRequest::fromPsr7() (^1.1 || ^2.0)",
+        "psr/simple-cache": "Кэш категорий в хранилище фреймворка через Psr16CacheStore (^1.0 || ^2.0 || ^3.0)"
+    },
+    "bin": [
+        "bin/gdeslon"
+    ],
+    "autoload": {
+        "psr-4": {
+            "Webreboot\\GdeSlon\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Webreboot\\GdeSlon\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse",
+        "check": [
+            "@stan",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.1.0"
+        }
+    },
+    "minimum-stability": "stable"
+}

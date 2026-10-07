@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shops>
+  <shop>
+    <id><![CDATA[105263]]></id>
+    <name><![CDATA[superstep.ru]]></name>
+    <short-description><![CDATA[Первый сникер-проект без шаблонов.]]></short-description>
+    <description><![CDATA[**SuperStep** – это первый сникер-проект без шаблонов. Уникальный концепт, сформированный вокруг кроссовок, а не субкультур, где с 2013-го года команда отбирает лучшие модели из коллекций мировых брендов. 
+
+ Представлять свои пары по всей стране нам доверяют Adidas, Asics, Converse, Diadora, Dr. Martens, Lacoste, New Balance, Nike, Puma, Reebok, The North Face, Timberland, Tommy Hilfiger, Vans и еще более 10 брендов. 
+ 
+Мы здесь, чтобы ты нашёл для себя пару, которая подойдёт именно тебе. Не важно, сворачиваешь ты горы в офисе или жгешь до утра на рейве у сцены. Ходишь в театр 2 раза в неделю или поёшь под гитару в палатке у костра. Отдаёшь все свои силы скейтпарку или открываешь новые страны с друзьями. Направление задаёшь ты, а мы поддержим тебя в любом твоём начинании.]]></description>
+    <url><![CDATA[https://superstep.ru/]]></url>
+    <conditions><![CDATA[**Вознаграждение вебмастера:**
+- Оплаченный заказ - 10,3%]]></conditions>
+    <is-green><![CDATA[false]]></is-green>
+    <gs-commission-mark><![CDATA[10,3%]]></gs-commission-mark>
+    <country>ru</country>
+    <kind><![CDATA[Физическое лицо]]></kind>
+    <categories>
+      <category>
+        <id>5</id>
+        <name><![CDATA[Одежда и обувь]]></name>
+      </category>
+    </categories>
+    <logo-file-name>https://cdn.gdeslon.ru/uploads/users/105263/logos/big.png?1788176999</logo-file-name>
+    <traffic-types>
+      <traffic-type>
+        <name><![CDATA[Контекстная реклама]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Контекстная реклама на бренд]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Cashback]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Clickunder/Popunder]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Doorway]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Баннерная реклама]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Тизерная реклама]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Мотивированный трафик]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Таргетированная реклама в соцсетях]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Скидочные и купонные агрегаторы]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Использование промокодов]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Видеоконтент (youtube, rutube, vimeo)]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Toolbar]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Email-рассылка]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Мобильный трафик]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Adult трафик]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Витрины]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[СМС-трафик]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Соцсети]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Программы лояльности]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Контентные сайты]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Push Ads]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Мессенджеры]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+    </traffic-types>
+    <tariffs>
+      <tariff id="1388" title="Оплаченный заказ" rate_type="percent" traffic_categories="">10.3</tariff>
+    </tariffs>
+    <tagging_ads>Реклама. Рекламодатель ООО «ИНТЕРМОДЕ» ИНН 7709900734, https://superstep.ru/. erid Kra23dyAk</tagging_ads>
+  </shop>
+  <shop>
+    <id><![CDATA[82012]]></id>
+    <name><![CDATA[AliExpress WW]]></name>
+    <short-description><![CDATA[Крупнейший интернет-магазин с товарами из Китая WW]]></short-description>
+    <description><![CDATA[**Партнерская программа AliExpress WW (Весь мир) предназначена для всех стран,кроме: Россия, Армения, Азербайджан, Беларусь, Грузия, Казахстан, Киргизия, Молдова, Таджикистан, Туркменистан, Узбекистан.**
+**Заказы из вышеперечисленных стран оплачиваться не будут.** 
+Для получения оплаты из гео Россия и СНГ необходимо использовать перевести траффик на оффер [AliExpress RU&CIS (Россия и СНГ)](https://www.gdeslon.ru/offers/aliexpress-ru-101124/)
+
+
+AliExpress – один из крупнейших мировых маркетплейсов, предлагающий клиентам самые низкие цены, а также выбор из более чем 100 миллионов товаров от 200 тысяч продавцов, 20 самых популярных способов оплаты и доставку в более чем 200 стран.
+
+Преимущества для веб-мастеров:
+• Процент подтверждения более 90%
+• Мировая известность бренда
+• Нет ограничений по ГЕО
+• Бесплатная/дешевая доставка
+• Принимаются все основные виды оплат
+• Высокие тарифы
+
+Преимущества для покупателей:
+• Более 100 млн. товаров
+• Более 200 тыс. продавцов
+• Низкие цены
+• Бесплатная доставка практически на все товары
+• Более 20 способов оплаты
+• Безопасные переводы: продавец получает деньги только после подтверждения заказа
+• Клиентская поддержка 24/7
+• Мультиязычные сайты AliExpress]]></description>
+    <url><![CDATA[http://aliexpress.com/]]></url>
+    <conditions><![CDATA[В партнерской программе Aliexpress вступили в силу новые правила начисления комиссии за заказы с доставкой **в Украину и остальные страны, кроме СНГ**, для вебмастеров со следующими видами трафика: **кэшбэк-сервисы, браузерные расширения, дропшиппинг-сервисы, партнерские сети**:
+
+Вознаграждение вебмастера:
+Hot products — 3%-69%
+Women's clothing — 6.90%
+Men's clothing — 6.90%
+Mobile phone accessories — 6.90%
+Children's clothing — 6.90%
+Interior accessories — 6.90%
+Garden supplies — 6.90%
+All other categories — 5.40%
+Desktop — 2.30%
+Tablets — 2.30%
+Internal storage — 2.30%
+External storage — 2.30%
+Mobile phone — 2.30%
+Home audio& video equipment — 2.30%
+Laptop netbooks — 2.30%
+Computer peripherals — 2.30%
+Electronics from special stores — 0.75%
+
+• Вознаграждение не начисляется за неаффилиатные товары, такие заказы не будут отображаться в статистике. Проверить является ли товар аффилиатным можно [здесь](https://portals.aliexpress.com/linkchecker.htm)
+
+• Для дропшиппинга: трекинг будет осуществляться только при заказе товара, на который вела партнерская ссылка, или при заказе других товаров этого же продавца. Отменяется повышенная комиссия за Hot Products.
+
+• Если у вас есть собственный пул веб-мастеров, которые работают через ваш аккаунт (модель “сабнетворк“),  отменяется повышенная комиссия за Hot Products.
+
+• Приоритетная атрибуция для всех вебмастеров (кроме дропшиппинга), продвигающих отдельные товары.
+
+Обращаем ваше внимание, что определение вида трафика вебмастера происходит на основе заявленных типа трафика и указанной площадки при подаче заявки на подключение к офферу. Из-за особенностей модерации на AliExpress первые 3-5 дней работы с оффером вебмастер может находиться на проверке в отделе контроля AliExpress, в течение данного времени вебмастеру недоступны повышенные ставки за Hot Products, а также не выплачивается вознаграждение за неаффилиатные товары.
+
+В случае, если вебмастер работает с партнерской программой AliExpress по нескольким площадкам под одним логином, одной из которых является кэшбэк-сервис, расширение или дропшиппинг-сервис, пожалуйста, свяжитесь с нашей службой поддержки.
+
+Любые производные и ошибочные написания бренда рекламодателя, не указанные в стоп-листе запрещены к использованию
+
+Правила начисления комиссии для других видов трафика, а также за заказы со страной доставки в СНГ (кроме Украины) остаются без изменений.
+
+**Основная ссылка из личного кабинета вебмастера ведет на best.aliexpress.com - это вариант главной страницы AliExpress, где все товары являются аффилиатными.**
+
+**Hot products:**
+Hot Products AliExpress - товары, продвигаемые продавцами и имеющие более высокую комиссию (вплоть до 69%). Основное правило начисления вознаграждения за Hot Products: переход должен быть осуществлен по рекламному материалу, ведущему на Hot Product. В случае? если переход был осуществлен по основной ссылке (ru.aliexpress.com, aliexpress.com) или по ссылке на обычный товар, будет применено стандартное вознаграждение.
+
+**Скидочные, купонные и промокодные площадки строго по согласованию. При нарушении условий работы с оффером комиссия будет обнулена.**
+
+**Обратите внимание:**
+
+Для жителей ЕС предусмотрен сервисный сбор в размере до 8% от стоимости покупки, поэтому комиссия считается от цены за вычетом этого сервисного сбора.
+
+*Новым пользователем считается покупатель ни разу не совершавший покупки на AliExpress согласно системе AliExpress.*
+
+***Максимальное вознаграждение за оплаченный заказ составляет $50 (конвертация в рубли по курсу ЦБ)***
+***Товары такие как аудио-книги, купоны, подарочные карты и все что связано с Интеллектуальной собственностью – не оплачивается.***]]></conditions>
+    <is-green><![CDATA[false]]></is-green>
+    <gs-commission-mark><![CDATA[0,75% - 69%]]></gs-commission-mark>
+    <country>ru</country>
+    <kind><![CDATA[Физическое лицо]]></kind>
+    <categories>
+      <category>
+        <id>9</id>
+        <name><![CDATA[Маркетплейсы и гипермаркеты]]></name>
+      </category>
+    </categories>
+    <logo-file-name>https://cdn.gdeslon.ru/uploads/users/82012/logos/big.png?1782736849</logo-file-name>
+    <traffic-types>
+      <traffic-type>
+        <name><![CDATA[Контекстная реклама]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Контекстная реклама на бренд]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Cashback]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Clickunder/Popunder]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Doorway]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Баннерная реклама]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Тизерная реклама]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Мотивированный трафик]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Таргетированная реклама в соцсетях]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Скидочные и купонные агрегаторы]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Использование промокодов]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Видеоконтент (youtube, rutube, vimeo)]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Toolbar]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Email-рассылка]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Мобильный трафик]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Adult трафик]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Витрины]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[СМС-трафик]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Соцсети]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Программы лояльности]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Контентные сайты]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Push Ads]]></name>
+        <allowed>no</allowed>
+      </traffic-type>
+      <traffic-type>
+        <name><![CDATA[Мессенджеры]]></name>
+        <allowed>yes</allowed>
+      </traffic-type>
+    </traffic-types>
+    <tagging_ads/>
+  </shop>
+</shops>

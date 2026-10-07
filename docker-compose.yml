@@ -1,0 +1,29 @@
+# Окружение разработки и тестов. Контейнеры работают постоянно (sleep), команды идут через `docker compose exec`:
+# создание и удаление контейнера на сервере тестов занимает десятки секунд, а exec — меньше секунды.
+# composer — установка зависимостей, phpstan и phpunit на Alpine (свежие PHP и libxml); php81/php84 — phpunit на
+# минимальной и актуальной версии PHP (Debian).
+# vendor/ и кэш composer живут в рабочей копии (в .gitignore) и сохраняются между прогонами.
+x-common: &common
+  command: ["sleep", "infinity"]
+  init: true
+  volumes:
+    - .:/app
+  working_dir: /app
+  user: "${UID:-1000}:${GID:-1000}"
+  environment:
+    HOME: /tmp
+    COMPOSER_HOME: /app/.cache/composer-home
+    COMPOSER_CACHE_DIR: /app/.cache/composer
+
+services:
+  composer:
+    <<: *common
+    image: composer:2
+
+  php81:
+    <<: *common
+    image: php:8.1-cli
+
+  php84:
+    <<: *common
+    image: php:8.4-cli

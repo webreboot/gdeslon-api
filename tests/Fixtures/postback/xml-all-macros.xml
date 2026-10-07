@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <gs_order_id>900001</gs_order_id>
+  <merchant_id>2573</merchant_id>
+  <sub_id>тест 1+2 &amp;x=y</sub_id>
+  <sub_id2>"кавычки" &lt;b&gt;</sub_id2>
+  <sub_id3></sub_id3>
+  <sub_id4></sub_id4>
+  <sub_id5></sub_id5>
+  <profit>123.45</profit>
+  <order_id>A-100/7#1</order_id>
+  <order_sum>1999.90</order_sum>
+  <click_time>2026-10-07 12:34:56</click_time>
+  <action_time></action_time>
+  <user_agent><![CDATA[Mozilla/5.0 (X11) "q" <x> \ end]]></user_agent>
+  <state>3</state>
+  <price_in_currency>25.5</price_in_currency>
+  <offer_name>Магазин «Тест» &amp; Co</offer_name>
+  <currency>USD</currency>
+  <click_id>abc123</click_id>
+  <action_ip>203.0.113.5</action_ip>
+  <user_referrer>https://example.com/a?b=1&amp;c=2</user_referrer>
+  <token>tok</token>
+</root>

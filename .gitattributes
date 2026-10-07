@@ -1,0 +1,18 @@
+* text=auto eol=lf
+*.ps1 text eol=lf
+# фикстуры — байт в байт как ответы API (в т.ч. CRLF внутри CDATA)
+/tests/Fixtures/** -text
+
+# Не попадает в архив пакета (composer --prefer-dist)
+/.claude export-ignore
+/.github export-ignore
+/docker-compose.yml export-ignore
+/Makefile export-ignore
+/scripts export-ignore
+/tests export-ignore
+/.env.example export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/phpstan.neon.dist export-ignore
+/phpunit.xml.dist export-ignore
+/CLAUDE.md export-ignore

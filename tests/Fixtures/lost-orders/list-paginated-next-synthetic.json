@@ -1,0 +1,20 @@
+{
+  "count": 30,
+  "next": "http://gdeslon.ru/api/v1/lost-orders/?limit=10&offset=10",
+  "previous": null,
+  "results": [
+    {
+      "id": 5796,
+      "order_id": "2342lost",
+      "order_date": "2026-09-24",
+      "description": "Заказ после перехода с моего сайта",
+      "attachment": "http://gdeslon.ru/uploads/ticket/path/to/file.jpg",
+      "merchant_id": 54376,
+      "merchant_name": "Магазин Пример",
+      "order_updated_date": "2026-09-27",
+      "order_total": 12020.22,
+      "order_status": "in_waiting",
+      "ticket_state": "in_work"
+    }
+  ]
+}
