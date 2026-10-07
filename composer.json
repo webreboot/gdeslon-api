@@ -1,6 +1,6 @@
 {
     "name": "webreboot/gdeslon-api",
-    "description": "PHP SDK, CLI и MCP-сервер для API вебмастеров партнёрской сети «Где Слон?» (gdeslon.ru)",
+    "description": "Неофициальный PHP SDK, CLI и MCP-сервер для API вебмастеров партнёрской сети «Где Слон?» (gdeslon.ru)",
     "type": "library",
     "license": "MIT",
     "keywords": [
