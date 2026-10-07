@@ -55,7 +55,7 @@ use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 final class GdeSlon
 {
     /** Версия пакета (User-Agent запросов). Обновляется при релизе. */
-    public const VERSION = '0.1.0-dev';
+    public const VERSION = '0.1.0';
 
     private readonly CategoryRepository $categories;
 
