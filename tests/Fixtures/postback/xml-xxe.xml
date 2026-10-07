@@ -1,0 +1,3 @@
+<?xml version="1.0"?>
+<!DOCTYPE root [<!ENTITY x SYSTEM "file:///etc/passwd">]>
+<root><merchant_id>&x;</merchant_id><state>3</state></root>

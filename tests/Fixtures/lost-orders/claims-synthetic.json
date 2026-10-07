@@ -1,0 +1,50 @@
+[
+  {
+    "id": 5796,
+    "order_id": "2342lost",
+    "order_date": "2026-09-24",
+    "description": "Заказ после перехода с моего сайта",
+    "attachment": "http://gdeslon.ru/uploads/ticket/path/to/file.jpg",
+    "merchant_id": 54376,
+    "merchant_name": "Магазин Пример",
+    "order_updated_date": "2026-09-27",
+    "order_total": 12020.22,
+    "order_status": "in_waiting",
+    "ticket_state": "in_work"
+  },
+  {
+    "id": 5797,
+    "order_id": "GS123L",
+    "order_date": "2026-09-20",
+    "description": "",
+    "attachment": null,
+    "merchant_id": 2573,
+    "merchant_name": "merchant.com",
+    "sale_updated_at": "2026-09-21T10:00:00+03:00",
+    "order_total": 12312.0,
+    "order_status": "waiting",
+    "ticket_state": "in_work"
+  },
+  {
+    "id": "5798",
+    "order_id": "A-100/7",
+    "order_date": "2026-08-01",
+    "attachment": "http://gdeslon.ru/uploads/ticket/a.pdf",
+    "merchant_id": "2573",
+    "merchant_name": "merchant.com",
+    "order_updated_date": null,
+    "order_total": "554.34",
+    "order_status": "confirmed",
+    "ticket_state": "closed"
+  },
+  {
+    "id": 5799,
+    "order_id": "B-1",
+    "order_date": "2026-07-15T10:00:00+03:00",
+    "merchant_id": 111,
+    "merchant_name": "",
+    "order_total": 100,
+    "order_status": "declined",
+    "ticket_status": "closed"
+  }
+]

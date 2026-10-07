@@ -1,0 +1,23 @@
+{
+  "gs_order_id": "900001",
+  "merchant_id": "2573",
+  "sub_id": "тест 1+2 &x=y",
+  "sub_id2": "\"кавычки\" <b>",
+  "sub_id3": "",
+  "sub_id4": "",
+  "sub_id5": "",
+  "profit": "123.45",
+  "order_id": "A-100/7#1",
+  "order_sum": "1999.90",
+  "click_time": "2026-10-07 12:34:56",
+  "action_time": "",
+  "user_agent": "Mozilla/5.0 (X11) \"q\" <x> \\ end",
+  "state": "3",
+  "price_in_currency": "25.5",
+  "offer_name": "Магазин «Тест» & Co",
+  "currency": "USD",
+  "click_id": "abc123",
+  "action_ip": "203.0.113.5",
+  "user_referrer": "https://example.com/a?b=1&c=2",
+  "token": "tok"
+}

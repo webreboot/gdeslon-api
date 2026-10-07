@@ -1,0 +1,32 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Webreboot\GdeSlon\Interface\Cli\Application;
+
+if (PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
+ini_set('display_errors', 'stderr');
+
+(static function (): void {
+    // Composer 2.2+ передаёт путь к autoload в прокси vendor/bin/gdeslon
+    $configured = $GLOBALS['_composer_autoload_path'] ?? null;
+    $candidates = is_string($configured) ? [$configured] : [__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'];
+    foreach ($candidates as $autoload) {
+        if (is_file($autoload)) {
+            require $autoload;
+
+            return;
+        }
+    }
+    fwrite(STDERR, "gdeslon: не найден vendor/autoload.php — выполните composer install\n");
+    exit(1);
+})();
+
+$argv = $_SERVER['argv'] ?? [];
+$arguments = is_array($argv) ? array_values(array_filter(array_slice($argv, 1), 'is_string')) : [];
+
+exit(Application::create()->run($arguments));
