@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Tests\Unit\Testing;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
@@ -88,6 +90,59 @@ final class FakeHttpTransportTest extends TestCase
         }
     }
 
+    public function testWillTimeOutOnConnectThrowsConnectTimeoutWithRequest(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willTimeOutOnConnect()
+            ->willTimeOutOnConnect('Resolving timed out after 5000 milliseconds');
+        $request = HttpRequest::get(self::URL, ['_gs_at' => 'secret-token', 'q' => 'iphone']);
+        $failures = [];
+        foreach ([$request, HttpRequest::post('https://www.gdeslon.ru/api/lost-orders/', '{}')] as $sent) {
+            try {
+                $transport->send($sent);
+                self::fail('Ожидалось исключение');
+            } catch (ConnectTimeoutException $e) {
+                $failures[] = $e;
+            }
+        }
+
+        self::assertSame(28, $failures[0]->curlErrorCode());
+        self::assertSame('GET', $failures[0]->method());
+        self::assertSame($request->maskedUri(), $failures[0]->url());
+        self::assertSame(
+            'GET ' . $request->maskedUri() . ': превышено время установки соединения (cURL 28: Connection timed out after 10000 milliseconds)',
+            $failures[0]->getMessage(),
+        );
+        self::assertStringNotContainsString('secret-token', $failures[0]->getMessage());
+        self::assertSame('POST', $failures[1]->method());
+        self::assertSame('https://www.gdeslon.ru/api/lost-orders/', $failures[1]->url());
+        self::assertStringContainsString('Resolving timed out after 5000 milliseconds', $failures[1]->getMessage());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function timeoutTexts(): iterable
+    {
+        yield 'текст соединения' => ['Connection timed out after 10000 milliseconds'];
+        yield 'текст DNS' => ['Resolving timed out after 5000 milliseconds'];
+        yield 'текст чтения' => ['Operation timed out after 30001 milliseconds with 16087 out of 159451 bytes received'];
+    }
+
+    #[DataProvider('timeoutTexts')]
+    public function testWillFailWith28StaysReadTimeoutWhateverText(string $message): void
+    {
+        $transport = (new FakeHttpTransport())->willFail(28, $message);
+
+        try {
+            $transport->send(HttpRequest::get(self::URL));
+            self::fail('Ожидалось исключение');
+        } catch (TimeoutException $e) {
+            self::assertSame(TimeoutException::class, $e::class);
+            self::assertStringContainsString($message, $e->getMessage());
+        }
+    }
+
     public function testWillFailCreatesExceptionInsideSend(): void
     {
         $transport = (new FakeHttpTransport())->willFail(7)->willFail(7);
@@ -160,6 +215,7 @@ final class FakeHttpTransportTest extends TestCase
         self::assertSame($transport, $transport->willReturn(200, ''));
         self::assertSame($transport, $transport->willThrow(new TransportException('x', 'GET', self::URL)));
         self::assertSame($transport, $transport->willFail(7));
+        self::assertSame($transport, $transport->willTimeOutOnConnect());
         self::assertSame([], $transport->requests());
     }
 }

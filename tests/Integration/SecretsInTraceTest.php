@@ -11,6 +11,7 @@ use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimUnconfirmedException;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
@@ -71,6 +72,13 @@ final class SecretsInTraceTest extends TestCase
             HttpException::class,
         ];
         yield 'ошибка соединения' => [static fn (FakeHttpTransport $t) => $t->willFail(7), TransportException::class];
+        yield 'таймаут соединения' => [static fn (FakeHttpTransport $t) => $t->willTimeOutOnConnect(), ConnectTimeoutException::class];
+        yield 'таймаут, затем таймаут соединения' => [
+            static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out')
+                ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
+                ->willTimeOutOnConnect(),
+            ConnectTimeoutException::class,
+        ];
     }
 
     /**
@@ -196,6 +204,7 @@ final class SecretsInTraceTest extends TestCase
         ];
         yield 'битый XML' => [static fn (FakeHttpTransport $t) => $t->willReturn(200, '<shops><shop>'), UnexpectedResponseException::class];
         yield 'таймаут' => [static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out'), TimeoutException::class];
+        yield 'таймаут соединения' => [static fn (FakeHttpTransport $t) => $t->willTimeOutOnConnect(), ConnectTimeoutException::class];
     }
 
     /**
@@ -206,6 +215,7 @@ final class SecretsInTraceTest extends TestCase
         yield '401' => [static fn (FakeHttpTransport $t) => $t->willReturn(401, Fixtures::read('coupons/error-401-bad-token.xml')), AuthenticationException::class];
         yield '500' => [static fn (FakeHttpTransport $t) => $t->willReturn(500, ''), HttpException::class];
         yield 'ошибка соединения' => [static fn (FakeHttpTransport $t) => $t->willFail(7), TransportException::class];
+        yield 'таймаут соединения' => [static fn (FakeHttpTransport $t) => $t->willTimeOutOnConnect(), ConnectTimeoutException::class];
     }
 
     /**
@@ -240,6 +250,8 @@ final class SecretsInTraceTest extends TestCase
         );
         yield 'подача, 503' => [static fn (FakeHttpTransport $t) => $t->willReturn(503, ''), $submit, LostOrderClaimUnconfirmedException::class];
         yield 'подача, таймаут' => [static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out'), $submit, LostOrderClaimUnconfirmedException::class];
+        yield 'подача, таймаут соединения' => [static fn (FakeHttpTransport $t) => $t->willTimeOutOnConnect(), $submit, LostOrderClaimUnconfirmedException::class];
+        yield 'список, таймаут соединения' => [static fn (FakeHttpTransport $t) => $t->willTimeOutOnConnect(), $list, ConnectTimeoutException::class];
     }
 
     /**

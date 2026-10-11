@@ -12,6 +12,7 @@ use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
@@ -282,6 +283,49 @@ final class SplitOnTimeoutProductCatalogTest extends TestCase
         self::assertCount(3, $inner->criteria());
     }
 
+    /**
+     * @return iterable<string, array{int, ?int}>
+     */
+    public static function connectTimeoutLimits(): iterable
+    {
+        yield 'есть куда делить' => [10, 5];
+        yield 'по умолчанию' => [20, 5];
+        yield 'limit 100' => [100, 5];
+        yield 'равен запасному' => [5, 5];
+        yield 'слишком много частей' => [97, 5];
+        yield 'повтор выключен' => [100, null];
+    }
+
+    #[DataProvider('connectTimeoutLimits')]
+    public function testConnectTimeoutOnFirstRequestIsRethrownAsIs(int $limit, ?int $fallback): void
+    {
+        $connectTimeout = self::connectTimeoutException(self::URL);
+        $inner = new FakeProductCatalog([static fn (): SearchResult => throw $connectTimeout]);
+
+        try {
+            (new SplitOnTimeoutProductCatalog($inner, $fallback))->search(new SearchCriteria(query: 'платье', limit: $limit));
+            self::fail('ожидалось исключение');
+        } catch (ConnectTimeoutException $e) {
+            self::assertSame($connectTimeout, $e);
+            self::assertStringNotContainsString('16 КБ', $e->getMessage());
+        }
+        self::assertCount(1, $inner->criteria());
+    }
+
+    public function testConnectTimeoutDuringSplitPassesThrough(): void
+    {
+        $connectTimeout = self::connectTimeoutException('https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=5&p=2');
+        $inner = new FakeProductCatalog([self::timeout(), self::page(1, 5, null), static fn (): SearchResult => throw $connectTimeout]);
+
+        try {
+            (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 15));
+            self::fail('ожидалось исключение');
+        } catch (ConnectTimeoutException $e) {
+            self::assertSame($connectTimeout, $e);
+        }
+        self::assertSame([[15, 1], [5, 1], [5, 2]], self::requested($inner));
+    }
+
     public function testOtherErrorDuringSplitPassesThrough(): void
     {
         $rateLimit = new HttpException('GET …: HTTP 420', 420, 'GET', self::URL, 'Rate limit exceeded!');
@@ -360,6 +404,16 @@ final class SplitOnTimeoutProductCatalogTest extends TestCase
             sprintf('GET %s: превышено время ожидания (cURL 28: Operation timed out)', self::URL),
             'GET',
             self::URL,
+            28,
+        );
+    }
+
+    private static function connectTimeoutException(string $url): ConnectTimeoutException
+    {
+        return new ConnectTimeoutException(
+            sprintf('GET %s: превышено время установки соединения (cURL 28: Connection timed out after 10001 milliseconds)', $url),
+            'GET',
+            $url,
             28,
         );
     }

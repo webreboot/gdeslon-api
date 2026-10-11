@@ -12,7 +12,7 @@ use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 
 final class FakeHttpTransport implements HttpTransport
 {
-    /** @var list<HttpResponse|TransportException|array{int, string}> */
+    /** @var list<HttpResponse|TransportException|array{int, string, bool}> */
     private array $queue = [];
 
     /** @var list<HttpRequest> */
@@ -37,7 +37,14 @@ final class FakeHttpTransport implements HttpTransport
 
     public function willFail(int $curlErrorCode, string $message = 'Failed to connect'): self
     {
-        $this->queue[] = [$curlErrorCode, $message];
+        $this->queue[] = [$curlErrorCode, $message, false];
+
+        return $this;
+    }
+
+    public function willTimeOutOnConnect(string $message = 'Connection timed out after 10000 milliseconds'): self
+    {
+        $this->queue[] = [28, $message, true];
 
         return $this;
     }
@@ -57,7 +64,7 @@ final class FakeHttpTransport implements HttpTransport
             throw $next;
         }
         if (is_array($next)) {
-            throw CurlErrorMapper::toException($request, $next[0], $next[1]);
+            throw CurlErrorMapper::toException($request, $next[0], $next[1], $next[2]);
         }
 
         return $next;

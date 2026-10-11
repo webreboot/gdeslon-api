@@ -71,7 +71,7 @@ cURL-транспорт с загрузкой частями и адаптеры
 | Параметр `Config` | По умолчанию | Назначение |
 |-------------------|--------------|------------|
 | `timeout` | `30.0` | общий таймаут запроса, с |
-| `connectTimeout` | `10.0` | таймаут установки соединения, с |
+| `connectTimeout` | `10.0` | таймаут установки соединения, с; истёк — `ConnectTimeoutException` |
 | `userAgent` | `null` | User-Agent; по умолчанию `webreboot-gdeslon-api/<версия> (+URL) PHP/<версия>` |
 | `rangeChunkSize` | `16384` | размер части HTTP Range для `api.gdeslon.ru`, байт (≥ 1024); `null` — отключить |
 | `cacheTtl` | `86400` | свежесть кэша категорий, с; `0` — ревалидация на каждый вызов |
@@ -236,8 +236,10 @@ new Config(apiToken: $token, searchFallbackLimit: null);   // без повто�
 - Если `limit` не больше `searchFallbackLimit` или повтор выключен, повтора нет: `TimeoutException` с подсказкой
   уменьшить `limit`.
 - Повтор начинается после полного `timeout` первого запроса; в худшем случае страница ждёт `timeout` × (число
-  под-запросов + 1). Таймаут соединения (cURL 28 при `connectTimeout`) тоже запускает повтор, поэтому при недоступном
-  API ожидание дольше.
+  под-запросов + 1).
+- Таймаут соединения — `ConnectTimeoutException` (DNS, TCP, TLS или туннель прокси не установлены, запрос не
+  отправлен) — повтор не запускает: исключение пробрасывается как есть, без подсказки про `limit`, и при недоступном
+  API страница ждёт около `connectTimeout`. На под-запросе — так же, остальные под-запросы не выполняются.
 - Под-ответ короче размера под-запроса (офферы вместе со `skipped()`) — конец выдачи, остальные под-запросы не
   выполняются. `total()` — из первого под-ответа.
 - Под-запрос тоже не уложился в `timeout` — `TimeoutException` «Страница limit … не загрузилась: повтор страницами по
@@ -248,8 +250,9 @@ new Config(apiToken: $token, searchFallbackLimit: null);   // без повто�
   повторы по `key()` (см. [Повторы между страницами](#повторы-между-страницами)).
 - На частые запросы API отвечает `HttpException` 420 `Rate limit exceeded!` без `Retry-After` — в том числе на
   под-запросе. SDK его не повторяет: сделайте паузу.
-- Повтор срабатывает только на `TimeoutException`: [собственный транспорт](#собственный-транспорт) должен бросать его
-  при истечении времени. Свой `ProductCatalog`, переданный в конструктор `GdeSlon`, не оборачивается.
+- Повтор запускает только таймаут чтения — `TimeoutException`, но не его подкласс `ConnectTimeoutException`:
+  [собственный транспорт](#собственный-транспорт) должен их различать. Свой `ProductCatalog`, переданный в конструктор
+  `GdeSlon`, не оборачивается.
 
 #### Картинки
 
@@ -646,7 +649,8 @@ $catalog = $gdeslon->merchants(public: true, refresh: true);
 Из части российских сетей TCP-соединение с `api.gdeslon.ru` (Hetzner) зависает после ~16 КБ тела. Поэтому ответы
 этого хоста по умолчанию загружаются частями по 16 КиБ через HTTP Range, каждая часть — отдельным соединением
 (`Connection: close`). Целостность проверяется по общему размеру из `Content-Range` и ETag/Last-Modified каждой
-части; зависшая часть повторяется с меньшим размером. Сервер без поддержки Range отвечает целиком (`200`), первая
+части; зависшая часть повторяется с меньшим размером, а после таймаута соединения — тем же; если попытки кончились
+на таймауте соединения — `ConnectTimeoutException`. Сервер без поддержки Range отвечает целиком (`200`), первая
 часть не повторяется.
 
 ```php
@@ -727,13 +731,24 @@ final class LoggingTransport implements HttpTransport
 - редиректы не выполняются, TLS проверяется;
 - под загрузкой частями (`inner:` или `new RangeTransport($transport)`) — соблюдение `HttpRequest::timeout()` и отказ
   от переиспользования соединения при `Connection: close`;
-- истечение времени — `TimeoutException`: на нём держится [повтор поиска меньшими страницами](#повтор-меньшими-страницами);
+- истечение времени: соединение не установлено (DNS, TCP, TLS, туннель прокси; запрос не отправлен) —
+  `ConnectTimeoutException`, ответ не дождались после отправки запроса — `TimeoutException`. На этом различии держится
+  [повтор поиска меньшими страницами](#повтор-меньшими-страницами): `TimeoutException` его запускает,
+  `ConnectTimeoutException` — нет. Не уверены в фазе — бросайте `TimeoutException`, повтор сохранится;
 - параметр запроса помечен атрибутом: в запросе токен или ключ, атрибут с интерфейса не наследуется, а без него на
   PHP 8.2+ запрос попадёт в аргументы трассы исключений транспорта.
 
 ```php
 public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
 ```
+
+В адаптере к PSR-18-клиенту не переводите Guzzle `ConnectException` в `ConnectTimeoutException`: Guzzle бросает его на
+любую ошибку cURL 28, в том числе на обрыв ответа после ~16 КБ, и повтор поиска перестанет работать.
+
+`CurlTransport` относит таймаут к соединению, если cURL не отправил запрос и не получил ни байта ответа.
+На старых libcurl (проверено на 7.74; на 8.14 и новее — различается) при HTTPS через прокси байты `CONNECT`
+считаются отправленным запросом, поэтому таймаут туннеля прокси приходит как `TimeoutException` и запускает повтор —
+как до появления `ConnectTimeoutException`.
 
 ## Исключения
 
@@ -743,7 +758,8 @@ public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
 | Исключение | Условие |
 |------------|---------|
 | `TransportException` | DNS, отказ соединения, TLS, обрыв ответа (`curlErrorCode()`) |
-| `TimeoutException` | истёк таймаут; наследует `TransportException` |
+| `TimeoutException` | истёк таймаут: ответ не дождались; наследует `TransportException` |
+| `ConnectTimeoutException` | соединение не установлено за `connectTimeout` или общий `timeout` (DNS, TCP, TLS, туннель прокси), запрос не отправлен; наследует `TimeoutException` |
 | `HttpException` | статус вне 2xx (`statusCode()`, `responseSnippet()`) |
 | `AuthenticationException` | 401/403 или учётные данные не приняты; наследует `HttpException` |
 | `UnexpectedResponseException` | невалидный JSON/XML, неожиданная структура документа |
@@ -781,7 +797,7 @@ SDK заменяет такие значения на `***` в `responseSnippet(
 
 | Класс | Заменяет | Возможности |
 |-------|----------|-------------|
-| `FakeHttpTransport` | `HttpTransport` | очередь ответов по порядку: `willReturn($status, $body, $headers)` (значение заголовка — строка или список строк), `willThrow($exception)`, `willFail($curlErrorCode, $message)`; запросы — `requests()`, `lastRequest()` |
+| `FakeHttpTransport` | `HttpTransport` | очередь ответов по порядку: `willReturn($status, $body, $headers)` (значение заголовка — строка или список строк), `willThrow($exception)`, `willFail($curlErrorCode, $message)`, `willTimeOutOnConnect($message)`; запросы — `requests()`, `lastRequest()` |
 | `FrozenClock` | `Clock` | `FrozenClock::at('2026-10-07 10:00:00')` (без зоны — UTC), `now()`, `advance($seconds)` |
 | `InMemoryCacheStore` | `CacheStore` | кэш в памяти, `all()`; `failWrites()` — запись отказывает |
 | `FakeCategoryRepository`, `FakeMerchantRepository` | порты каталога | отдают переданный снимок; `calls()`, `lastRefresh()`, `lastPublic()` |
@@ -824,10 +840,12 @@ $config = new Config(apiToken: 'test-token', searchFallbackLimit: null);
 (new FakeHttpTransport())->willReturn(200, '<yml_catalog><offers><offer');            // UnexpectedResponseException
 (new FakeHttpTransport())->willFail(28, 'Operation timed out');                       // TimeoutException
 (new FakeHttpTransport())->willFail(7);                                                // TransportException
+(new FakeHttpTransport())->willTimeOutOnConnect();                                    // ConnectTimeoutException
 ```
 
-`willFail()` принимает код ошибки cURL: 28 — `TimeoutException`, остальные — `TransportException`. Исключение
-создаётся при отправке, с методом и адресом запроса, как у `CurlTransport`. Поиск после таймаута повторяется
+`willFail()` принимает код ошибки cURL: 28 — `TimeoutException`, остальные — `TransportException`; текст сообщения
+не разбирается. Таймаут соединения — `willTimeOutOnConnect()`: `ConnectTimeoutException`, поиск его не повторяет.
+Исключение создаётся при отправке, с методом и адресом запроса, как у `CurlTransport`. Поиск после таймаута повторяется
 меньшими страницами ([подробнее](#повтор-меньшими-страницами)), и каждый под-запрос берёт следующий ответ из
 очереди; чтобы проверить сам таймаут, отключите повтор: `searchFallbackLimit: null`.
 

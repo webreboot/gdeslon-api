@@ -3,6 +3,27 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/).
 До 1.0 публичный API может меняться в минорных версиях; такие изменения отмечаются здесь.
 
+## [Не выпущено]
+
+### Добавлено
+
+- `ConnectTimeoutException` — таймаут установки соединения: DNS, TCP, TLS или туннель прокси не установлены, запрос
+  не отправлен. Наследует `TimeoutException`, поэтому `catch (TimeoutException)` ловит оба. `CurlTransport` бросает
+  его, если cURL 28 пришёл до отправки запроса и до первого байта ответа; сообщение — «превышено время установки
+  соединения». Таймаут туннеля HTTPS-прокси остаётся `TimeoutException`
+  на старых libcurl (проверено на 7.74; на 8.14 и новее — различается).
+- `FakeHttpTransport::willTimeOutOnConnect()` — таймаут соединения в тестах; `willFail(28, …)` с любым текстом
+  по-прежнему даёт `TimeoutException`.
+
+### Изменено
+
+- Повтор поиска меньшими страницами запускает только таймаут чтения. `ConnectTimeoutException` первого запроса
+  пробрасывается как есть, без повтора и без подсказки про `limit`: при недоступном API поиск ждёт около
+  `connectTimeout`, а не `connectTimeout` × (число под-запросов + 1). На под-запросе повтора — так же.
+- Загрузка частями повторяет часть после таймаута соединения тем же размером (после таймаута чтения — как раньше,
+  вдвое меньшей), а исчерпав попытки, бросает `ConnectTimeoutException`.
+- `TimeoutException` больше не `final`.
+
 ## [0.2.0] — 2026-10-11
 
 Отработаны замечания первого потребителя: ссылки с sub_id, erid и ключ оффера, тексты без HTML-сущностей, валюта
@@ -178,5 +199,6 @@
 - **MCP-сервер** `gdeslon mcp` для AI-агентов (Claude Desktop, Claude Code и др.): 11 инструментов чтения, MCP
   `2024-11-05`…`2025-11-25` и `2026-07-28`, маска секретов, страницы для длинных списков. См. [docs/mcp.md](docs/mcp.md).
 
+[Не выпущено]: https://github.com/webreboot/gdeslon-api/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.2.0
 [0.1.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.1.0

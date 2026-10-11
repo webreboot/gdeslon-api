@@ -447,6 +447,19 @@ final class McpToolsTest extends TestCase
         self::assertStringContainsString('"categories":[', McpTester::text($result));
     }
 
+    public function testSearchConnectTimeoutFails(): void
+    {
+        $mcp = new McpTester((new FakeHttpTransport())->willTimeOutOnConnect());
+
+        $failure = McpTester::failure($mcp->call('search_offers', ['query' => 'платье'], self::TOKEN));
+
+        self::assertStringStartsWith('[failed] ', $failure);
+        self::assertStringContainsString('превышено время установки соединения', $failure);
+        self::assertStringNotContainsString('16 КБ', $failure);
+        self::assertStringNotContainsString('secret-token-0123', $failure);
+        self::assertCount(1, $mcp->cli->transport->requests());
+    }
+
     public function testSearchDegraded(): void
     {
         $mcp = new McpTester((new FakeHttpTransport())

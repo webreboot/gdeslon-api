@@ -9,6 +9,7 @@ use Webreboot\GdeSlon\Config;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
 use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
@@ -39,6 +40,7 @@ final class ConsumerExampleTest extends TestCase
             AuthenticationException::class => (new FakeHttpTransport())->willReturn(403, 'This affiliate token does not exists', ['Content-Type' => ['text/html; charset=utf-8']]),
             UnexpectedResponseException::class => (new FakeHttpTransport())->willReturn(200, '<yml_catalog><offers><offer'),
             TimeoutException::class => (new FakeHttpTransport())->willFail(28, 'Operation timed out'),
+            ConnectTimeoutException::class => (new FakeHttpTransport())->willTimeOutOnConnect(),
             TransportException::class => (new FakeHttpTransport())->willFail(7),
         ];
         foreach ($cases as $expected => $transport) {
@@ -46,7 +48,7 @@ final class ConsumerExampleTest extends TestCase
                 GdeSlon::create(new Config(apiToken: 'test-token', searchFallbackLimit: null), $transport)->search('iphone');
                 self::fail('Ожидалось ' . $expected);
             } catch (GdeSlonException $e) {
-                self::assertInstanceOf($expected, $e);
+                self::assertSame($expected, $e::class);
                 self::assertStringNotContainsString('test-token', $e->getMessage());
             }
         }

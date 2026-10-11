@@ -7,6 +7,7 @@ namespace Webreboot\GdeSlon\Infrastructure\Api\Catalog;
 use Webreboot\GdeSlon\Domain\Catalog\ProductCatalog;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 
@@ -30,6 +31,8 @@ final class SplitOnTimeoutProductCatalog implements ProductCatalog
     {
         try {
             return $this->inner->search($criteria);
+        } catch (ConnectTimeoutException $e) {
+            throw $e;
         } catch (TimeoutException $e) {
             $limit = $criteria->limit();
             if ($this->fallbackLimit === null || $limit <= $this->fallbackLimit) {
@@ -61,6 +64,8 @@ final class SplitOnTimeoutProductCatalog implements ProductCatalog
         for ($part = 1; $part <= $parts; $part++) {
             try {
                 $result = $this->inner->search($criteria->withLimit($subLimit)->withPage($firstPage + $part - 1));
+            } catch (ConnectTimeoutException $e) {
+                throw $e;
             } catch (TimeoutException $e) {
                 throw new TimeoutException(
                     sprintf(

@@ -13,6 +13,7 @@ use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimUnconfirmedException;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderValidationException;
 use Webreboot\GdeSlon\Domain\Promo\CouponCriteriaRejectedException;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
@@ -48,6 +49,7 @@ final class ExceptionHierarchyTest extends TestCase
             InvalidArgumentException::class,
             TransportException::class,
             TimeoutException::class,
+            ConnectTimeoutException::class,
             HttpException::class,
             AuthenticationException::class,
             UnexpectedResponseException::class,
@@ -73,6 +75,7 @@ final class ExceptionHierarchyTest extends TestCase
     public function testSpecialisations(): void
     {
         self::assertTrue(self::extends(TimeoutException::class, TransportException::class));
+        self::assertTrue(self::extends(ConnectTimeoutException::class, TimeoutException::class));
         self::assertTrue(self::extends(AuthenticationException::class, HttpException::class));
         self::assertTrue(self::extends(InvalidArgumentException::class, \InvalidArgumentException::class));
         self::assertTrue(self::extends(CategoryNotFoundException::class, \OutOfBoundsException::class));

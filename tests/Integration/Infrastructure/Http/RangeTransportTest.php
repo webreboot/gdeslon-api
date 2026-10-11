@@ -6,6 +6,7 @@ namespace Webreboot\GdeSlon\Tests\Integration\Infrastructure\Http;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
@@ -304,6 +305,63 @@ final class RangeTransportTest extends TestCase
         self::assertSame(['bytes=4096-8191', 'bytes=4096-8191', 'bytes=4096-8191', 'bytes=4096-8191'], array_slice($tiny->ranges(), 1, 4));
     }
 
+    public function testConnectTimeoutOnPartIsRetriedWithSameSize(): void
+    {
+        $body = self::body(self::SIZE);
+        $server = (new FakeRangeServer($body))->failPart(32768, self::connectTimeout());
+
+        $response = (new RangeTransport($server))->send(HttpRequest::get(self::URL));
+
+        self::assertSame(['bytes=0-16383', 'bytes=16384-32767', 'bytes=32768-49151', 'bytes=32768-49151', 'bytes=49152-65535'], array_slice($server->ranges(), 0, 5));
+        self::assertSame($body, $response->body());
+    }
+
+    public function testGivesUpAfterConnectTimeoutsKeepsClass(): void
+    {
+        $connectTimeout = self::connectTimeout();
+        $server = (new FakeRangeServer(self::body(self::SIZE)))->failPart(32768, $connectTimeout, 10);
+
+        try {
+            (new RangeTransport($server))->send(HttpRequest::get(self::URL, ['_gs_at' => 'secret']));
+            self::fail('Ожидалось исключение');
+        } catch (ConnectTimeoutException $e) {
+            self::assertSame(28, $e->curlErrorCode());
+            self::assertSame($connectTimeout, $e->getPrevious());
+            self::assertSame('GET', $e->method());
+            self::assertSame(self::URL . '?_gs_at=***', $e->url());
+            self::assertStringContainsString('загрузка частями прервана на байте 32768 из 159451 после 3 попыток: ' . $connectTimeout->getMessage(), $e->getMessage());
+            self::assertStringNotContainsString('secret', $e->getMessage());
+        }
+        self::assertSame(['bytes=32768-49151', 'bytes=32768-49151', 'bytes=32768-49151'], array_slice($server->ranges(), 2));
+    }
+
+    public function testFirstPartConnectTimeoutIsNotRetried(): void
+    {
+        $connectTimeout = self::connectTimeout();
+        $server = (new FakeRangeServer(self::body(40000)))->failPart(0, $connectTimeout, 3);
+
+        try {
+            (new RangeTransport($server))->send(HttpRequest::get(self::URL));
+            self::fail('Ожидалось исключение');
+        } catch (ConnectTimeoutException $e) {
+            self::assertSame($connectTimeout, $e);
+        }
+        self::assertCount(1, $server->requests());
+    }
+
+    public function testReadThenConnectTimeoutHalvesOnlyOnce(): void
+    {
+        $body = self::body(self::SIZE);
+        $server = (new FakeRangeServer($body))
+            ->failPart(32768, self::timeout())
+            ->failPart(32768, self::connectTimeout());
+
+        $response = (new RangeTransport($server))->send(HttpRequest::get(self::URL));
+
+        self::assertSame(['bytes=32768-49151', 'bytes=32768-40959', 'bytes=32768-40959', 'bytes=40960-49151'], array_slice($server->ranges(), 2, 4));
+        self::assertSame($body, $response->body());
+    }
+
     public function testOtherTransportErrorsAreRetriedWithSameSize(): void
     {
         $body = self::body(self::SIZE);
@@ -442,6 +500,11 @@ final class RangeTransportTest extends TestCase
     private static function timeout(): TimeoutException
     {
         return new TimeoutException('таймаут', 'GET', self::URL, 28);
+    }
+
+    private static function connectTimeout(): ConnectTimeoutException
+    {
+        return new ConnectTimeoutException('таймаут соединения', 'GET', self::URL, 28);
     }
 
     private static function part(string $body, int $start, int $end, int $total): HttpResponse

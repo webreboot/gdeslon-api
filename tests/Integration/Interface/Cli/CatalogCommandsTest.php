@@ -568,6 +568,20 @@ final class CatalogCommandsTest extends TestCase
         self::assertStringContainsString("Страница 1 · найдено 8140 · загружено частями по 4 · следующая: --page=2\n", $cli->stdout);
     }
 
+    public function testSearchConnectTimeoutFailsWithoutRetry(): void
+    {
+        $cli = new CliTester((new FakeHttpTransport())->willTimeOutOnConnect());
+
+        self::assertSame(1, $cli->run(['search', 'платье'], self::TOKEN));
+
+        self::assertSame('', $cli->stdout);
+        self::assertStringStartsWith('Ошибка: ', $cli->stderr);
+        self::assertStringContainsString('превышено время установки соединения', $cli->stderr);
+        self::assertStringNotContainsString('16 КБ', $cli->stderr);
+        self::assertStringNotContainsString('secret-token-0123', $cli->stderr);
+        self::assertCount(1, $cli->transport->requests());
+    }
+
     private static function degradedCli(): CliTester
     {
         return new CliTester((new FakeHttpTransport())

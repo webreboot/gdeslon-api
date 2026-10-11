@@ -261,6 +261,7 @@ final class HttpLostOrderClaimsTest extends TestCase
     public static function unknownOutcomes(): iterable
     {
         yield 'таймаут' => [static fn (FakeHttpTransport $t): FakeHttpTransport => $t->willThrow(new TimeoutException('таймаут', 'POST', self::URL, 28))];
+        yield 'таймаут соединения' => [static fn (FakeHttpTransport $t): FakeHttpTransport => $t->willTimeOutOnConnect()];
         foreach ([52, 56, 80, null] as $code) {
             yield 'обрыв cURL ' . var_export($code, true) => [static fn (FakeHttpTransport $t): FakeHttpTransport => $t->willThrow(new TransportException('обрыв', 'POST', self::URL, $code))];
         }

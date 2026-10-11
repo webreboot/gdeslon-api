@@ -24,7 +24,7 @@ final class FakeRangeServer implements HttpTransport
 
     private bool $honourIfMatch = true;
 
-    /** @var array<int, array{TransportException|int, int}> */
+    /** @var array<int, list<TransportException|int>> */
     private array $failures = [];
 
     /** @var array<int, HttpResponse> */
@@ -55,7 +55,9 @@ final class FakeRangeServer implements HttpTransport
 
     public function failPart(int $offset, TransportException|int $exception, int $times = 1): self
     {
-        $this->failures[$offset] = [$exception, $times];
+        for ($k = 0; $k < $times; $k++) {
+            $this->failures[$offset][] = $exception;
+        }
 
         return $this;
     }
@@ -78,11 +80,8 @@ final class FakeRangeServer implements HttpTransport
         }
 
         $range = $this->parseRange($request->header('Range'));
-        if ($range !== null && isset($this->failures[$range[0]]) && $this->failures[$range[0]][1] > 0) {
-            $this->failures[$range[0]][1]--;
-
-            $failure = $this->failures[$range[0]][0];
-
+        $failure = $range !== null && isset($this->failures[$range[0]]) ? array_shift($this->failures[$range[0]]) : null;
+        if ($failure !== null) {
             throw is_int($failure) ? CurlErrorMapper::toException($request, $failure, 'Operation timed out') : $failure;
         }
 

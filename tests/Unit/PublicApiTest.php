@@ -105,6 +105,31 @@ final class PublicApiTest extends TestCase
         }
     }
 
+    public function testReadmeDocumentsConnectTimeout(): void
+    {
+        $readme = (string) file_get_contents(dirname(__DIR__, 2) . '/README.md');
+
+        self::assertStringContainsString('`ConnectTimeoutException`', self::section($readme, '## Конфигурация'));
+        self::assertStringContainsString('`ConnectTimeoutException`', self::section($readme, '#### Повтор меньшими страницами'));
+        self::assertStringContainsString('| `ConnectTimeoutException` |', self::section($readme, '## Исключения'));
+        self::assertStringContainsString('`ConnectTimeoutException`', self::section($readme, '### Загрузка частями'));
+        $transport = self::section($readme, '### Собственный транспорт');
+        foreach (['`ConnectTimeoutException`', '`TimeoutException`', 'ConnectException', 'старых libcurl (проверено на 7.74; на 8.14 и новее — различается)'] as $expected) {
+            self::assertStringContainsString($expected, $transport);
+        }
+        $testing = self::section($readme, '## Тестирование в приложении');
+        self::assertStringContainsString('->willTimeOutOnConnect()', $testing);
+        self::assertStringContainsString('`willTimeOutOnConnect()`', $testing);
+        self::assertStringNotContainsString('тоже запускает повтор', $readme);
+        self::assertStringNotContainsString('срабатывает только на `TimeoutException`', $readme);
+        self::assertStringNotContainsString('libcurl 7', $readme);
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        foreach (['### Добавлено', '### Изменено', '`ConnectTimeoutException`', '`FakeHttpTransport::willTimeOutOnConnect()`', 'старых libcurl (проверено на 7.74; на 8.14 и новее — различается)'] as $expected) {
+            self::assertStringContainsString($expected, $unreleased);
+        }
+    }
+
     private static function section(string $markdown, string $heading): string
     {
         $start = strpos($markdown, "\n" . $heading . "\n");

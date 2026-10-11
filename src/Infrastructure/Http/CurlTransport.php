@@ -61,7 +61,10 @@ final class CurlTransport implements HttpTransport
 
         $body = curl_exec($handle);
         if (!is_string($body)) {
-            throw CurlErrorMapper::toException($request, curl_errno($handle), curl_error($handle));
+            // не HEADER_SIZE (считает ответ прокси на CONNECT) и не PRETRANSFER_TIME (в libcurl 8.22 равен прошедшему времени)
+            $connecting = curl_getinfo($handle, CURLINFO_REQUEST_SIZE) === 0 && (float) curl_getinfo($handle, CURLINFO_SIZE_DOWNLOAD) === 0.0;
+
+            throw CurlErrorMapper::toException($request, curl_errno($handle), curl_error($handle), $connecting);
         }
 
         return new HttpResponse((int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE), $body, $headers->headers());

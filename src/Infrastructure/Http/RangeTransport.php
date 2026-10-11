@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Infrastructure\Http;
 
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
@@ -118,6 +119,8 @@ final class RangeTransport implements HttpTransport
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
             try {
                 return $this->transport->send($this->partRequest($request, $offset, $chunk, $etag, true));
+            } catch (ConnectTimeoutException $e) {
+                $last = $e;
             } catch (TimeoutException $e) {
                 $last = $e;
                 $chunk = max($minimum, intdiv($chunk, 2));
@@ -137,9 +140,11 @@ final class RangeTransport implements HttpTransport
             $last->getMessage(),
         );
 
-        throw $last instanceof TimeoutException
-            ? new TimeoutException($message, $request->method(), $request->maskedUri(), $last->curlErrorCode(), $last)
-            : new TransportException($message, $request->method(), $request->maskedUri(), $last->curlErrorCode(), $last);
+        throw match (true) {
+            $last instanceof ConnectTimeoutException => new ConnectTimeoutException($message, $request->method(), $request->maskedUri(), $last->curlErrorCode(), $last),
+            $last instanceof TimeoutException => new TimeoutException($message, $request->method(), $request->maskedUri(), $last->curlErrorCode(), $last),
+            default => new TransportException($message, $request->method(), $request->maskedUri(), $last->curlErrorCode(), $last),
+        };
     }
 
     private function partRequest(#[\SensitiveParameter] HttpRequest $request, int $offset, int $chunk, ?string $etag, bool $isContinuation): HttpRequest

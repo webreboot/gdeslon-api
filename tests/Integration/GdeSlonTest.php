@@ -30,6 +30,7 @@ use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Domain\Shared\SubId;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\GdeSlon;
@@ -423,6 +424,22 @@ final class GdeSlonTest extends TestCase
         self::assertTrue($result->isDegraded());
         self::assertSame(5, $result->effectiveLimit());
         self::assertSame(10, $result->criteria()->limit());
+    }
+
+    public function testSearchDoesNotSplitOnConnectTimeout(): void
+    {
+        $transport = (new FakeHttpTransport())->willTimeOutOnConnect();
+
+        try {
+            GdeSlon::create(new Config(apiToken: 'secret-token'), $transport)->search('платье');
+            self::fail('Ожидалось исключение');
+        } catch (ConnectTimeoutException $e) {
+            self::assertStringContainsString(': превышено время установки соединения (cURL 28: Connection timed out after 10000 milliseconds)', $e->getMessage());
+            self::assertStringNotContainsString('16 КБ', $e->getMessage());
+            self::assertStringNotContainsString('secret-token', $e->getMessage() . $e->url());
+            self::assertNull($e->getPrevious());
+        }
+        self::assertCount(1, $transport->requests());
     }
 
     public function testSearchFallbackLimitFromConfig(): void
