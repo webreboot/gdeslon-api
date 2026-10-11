@@ -124,7 +124,7 @@ final class PublicApiTest extends TestCase
         self::assertStringNotContainsString('срабатывает только на `TimeoutException`', $readme);
         self::assertStringNotContainsString('libcurl 7', $readme);
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.3.0] — 2026-10-11');
         foreach (['### Добавлено', '### Изменено', '`ConnectTimeoutException`', '`FakeHttpTransport::willTimeOutOnConnect()`', 'старых libcurl (проверено на 7.74; на 8.14 и новее — различается)'] as $expected) {
             self::assertStringContainsString($expected, $unreleased);
         }
