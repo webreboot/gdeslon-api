@@ -88,7 +88,7 @@ final class CouponsCommandTest extends TestCase
         $cli = new CliTester((new FakeHttpTransport())->willReturn(200, Fixtures::read('coupons/coupons-broken.xml')));
         self::assertSame(0, $cli->run(['coupons'], self::ENV));
         self::assertStringContainsString('500001', $cli->stdout);
-        self::assertStringContainsString('Пропущено записей с битыми данными: 10', $cli->stderr);
+        self::assertStringContainsString('Пропущено записей: 10', $cli->stderr);
         self::assertSame(4, substr_count($cli->stderr, "\n"), 'итог и не больше трёх причин');
 
         $cli = new CliTester((new FakeHttpTransport())->willReturn(200, Fixtures::read('coupons/coupons-broken.xml')));

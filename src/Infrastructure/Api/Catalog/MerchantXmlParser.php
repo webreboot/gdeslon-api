@@ -12,6 +12,7 @@ use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
 use Webreboot\GdeSlon\Domain\Catalog\RateType;
 use Webreboot\GdeSlon\Domain\Catalog\Tariff;
 use Webreboot\GdeSlon\Domain\Catalog\TrafficType;
+use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\Xml\SimpleXml;
@@ -56,22 +57,22 @@ final class MerchantXmlParser
         try {
             return new Merchant(
                 new MerchantId((int) $rawId),
-                self::required($shop, 'name', $label),
+                SimpleXml::decodedOptional($shop, 'name') ?? throw self::invalidRecord($label, 'нет поля name'),
                 self::required($shop, 'url', $label),
-                shortDescription: SimpleXml::text($shop, 'short-description') ?? '',
-                description: SimpleXml::text($shop, 'description') ?? '',
-                conditions: SimpleXml::text($shop, 'conditions') ?? '',
-                logoUrl: SimpleXml::optional($shop, 'logo-file-name'),
+                shortDescription: SimpleXml::decodedText($shop, 'short-description') ?? '',
+                description: SimpleXml::decodedText($shop, 'description') ?? '',
+                conditions: SimpleXml::decodedText($shop, 'conditions') ?? '',
+                logoUrl: HttpUrl::orNull(SimpleXml::optional($shop, 'logo-file-name')),
                 country: SimpleXml::optional($shop, 'country'),
-                kind: SimpleXml::optional($shop, 'kind'),
+                kind: SimpleXml::decodedOptional($shop, 'kind'),
                 green: self::boolean(SimpleXml::text($shop, 'is-green') ?? 'false', 'is-green', $label),
-                commissionSummary: SimpleXml::text($shop, 'gs-commission-mark'),
+                commissionSummary: SimpleXml::decodedText($shop, 'gs-commission-mark'),
                 categories: $this->categories($shop, $label),
                 affiliateLink: SimpleXml::optional($shop, 'affiliate-link'),
                 trafficTypes: $this->trafficTypes($shop, $label),
                 tariffs: $this->tariffs($shop, $label),
                 categoryTariffs: $this->categoryTariffs($shop, $label),
-                adMarking: SimpleXml::text($shop, 'tagging_ads'),
+                adMarking: SimpleXml::decodedText($shop, 'tagging_ads'),
             );
         } catch (InvalidArgumentException $e) {
             throw self::invalidRecord($label, $e->getMessage(), $e);
@@ -89,7 +90,7 @@ final class MerchantXmlParser
             if ($id === null || preg_match('/^\d{1,18}$/', $id) !== 1) {
                 throw self::invalidRecord($label, sprintf('category: id должен быть целым, получено «%s»', $id ?? ''));
             }
-            $categories[] = new MerchantCategory((int) $id, SimpleXml::text($category, 'name'));
+            $categories[] = new MerchantCategory((int) $id, SimpleXml::decodedText($category, 'name'));
         }
 
         return $categories;
@@ -102,7 +103,7 @@ final class MerchantXmlParser
     {
         $types = [];
         foreach (SimpleXml::children(SimpleXml::child($shop, 'traffic-types'), 'traffic-type') as $type) {
-            $name = SimpleXml::text($type, 'name');
+            $name = SimpleXml::decodedText($type, 'name');
             $allowed = self::boolean(SimpleXml::text($type, 'allowed') ?? '', 'allowed', $label);
             if ($name !== null) {
                 $types[] = new TrafficType($name, $allowed);

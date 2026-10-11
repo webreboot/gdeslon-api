@@ -9,6 +9,8 @@ use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
+use Webreboot\GdeSlon\Domain\Shared\Currency;
+use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
@@ -42,10 +44,20 @@ final class OfferXmlParser
             self::DOCTYPE,
         );
 
-        return new SearchResult($criteria, $records->records(), self::total(
+        $offers = [];
+        $skipped = $records->skipped();
+        foreach ($records->records() as $offer) {
+            if ($offer->price()->isZero()) {
+                $skipped[] = sprintf('оффер «%s»: цена 0, оффер пропущен', $offer->id());
+            } else {
+                $offers[] = $offer;
+            }
+        }
+
+        return new SearchResult($criteria, $offers, self::total(
             $records->captured(self::TOTAL_PATH),
             $records->records() === [] && $records->skipped() === [] && $criteria->page() === 1,
-        ), $records->skipped());
+        ), $skipped);
     }
 
     private function toOffer(\SimpleXMLElement $offer): Offer
@@ -62,27 +74,27 @@ final class OfferXmlParser
             throw self::invalid($label, sprintf('merchant_id атрибута (%d) и элемента (%s) различаются', $merchantId, $merchantElement));
         }
 
-        $currency = SimpleXml::optional($offer, 'currencyId') ?? throw self::invalid($label, 'нет поля currencyId');
+        $currency = self::currency($offer, $label);
 
         try {
             return new Offer(
                 $id,
                 new MerchantId($merchantId),
-                self::decode(SimpleXml::text($offer, 'name')) ?? throw self::invalid($label, 'нет поля name'),
+                SimpleXml::decodedText($offer, 'name') ?? throw self::invalid($label, 'нет поля name'),
                 self::money($offer, 'price', $currency, $label) ?? throw self::invalid($label, 'нет поля price'),
                 SimpleXml::optional($offer, 'url') ?? throw self::invalid($label, 'нет поля url'),
                 oldPrice: self::money($offer, 'oldprice', $currency, $label),
-                charge: self::money($offer, 'charge', $currency, $label),
+                charge: self::charge($offer, $currency, $label),
                 article: self::blankToNull(SimpleXml::attribute($offer, 'article')),
                 categoryId: self::category($offer, $label),
                 available: self::available($offer, $label),
-                picture: SimpleXml::optional($offer, 'picture'),
-                thumbnail: SimpleXml::optional($offer, 'thumbnail'),
-                originalPicture: SimpleXml::optional($offer, 'original_picture'),
-                description: self::decode(SimpleXml::text($offer, 'description')),
-                vendor: self::decode(SimpleXml::text($offer, 'vendor')),
-                model: self::decode(SimpleXml::text($offer, 'model')),
-                productUrl: SimpleXml::optional($offer, 'destination-url-do-not-send-traffic'),
+                picture: HttpUrl::orNull(SimpleXml::optional($offer, 'picture')),
+                thumbnail: HttpUrl::orNull(SimpleXml::optional($offer, 'thumbnail')),
+                originalPicture: HttpUrl::orNull(SimpleXml::optional($offer, 'original_picture')),
+                description: SimpleXml::decodedText($offer, 'description'),
+                vendor: SimpleXml::decodedText($offer, 'vendor'),
+                model: SimpleXml::decodedText($offer, 'model'),
+                productUrl: HttpUrl::orNull(SimpleXml::optional($offer, 'destination-url-do-not-send-traffic')),
                 adMarking: self::adMarking($offer),
             );
         } catch (InvalidArgumentException $e) {
@@ -94,7 +106,25 @@ final class OfferXmlParser
     {
         $taggingAds = SimpleXml::child($offer, 'tagging_ads');
 
-        return $taggingAds === null ? null : SimpleXml::text($taggingAds, 'info');
+        return $taggingAds === null ? null : SimpleXml::decodedText($taggingAds, 'info');
+    }
+
+    private static function currency(\SimpleXMLElement $offer, string $label): string
+    {
+        $code = SimpleXml::optional($offer, 'currencyId') ?? throw self::invalid($label, 'нет поля currencyId');
+
+        try {
+            return Currency::normalize($code);
+        } catch (InvalidArgumentException $e) {
+            throw self::invalid($label, sprintf('поле currencyId: %s', $e->getMessage()), $e);
+        }
+    }
+
+    private static function charge(\SimpleXMLElement $offer, string $currency, string $label): ?Money
+    {
+        $charge = self::money($offer, 'charge', $currency, $label);
+
+        return $charge !== null && $charge->isZero() ? null : $charge;
     }
 
     private static function money(\SimpleXMLElement $offer, string $field, string $currency, string $label): ?Money
@@ -150,11 +180,6 @@ final class OfferXmlParser
         }
 
         return $emptyFirstPage ? 0 : null;
-    }
-
-    private static function decode(?string $text): ?string
-    {
-        return $text === null ? null : html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     private static function blankToNull(?string $value): ?string

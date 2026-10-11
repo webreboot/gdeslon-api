@@ -25,11 +25,189 @@ final class OfferXmlParserTest extends TestCase
         $result = self::fixture();
 
         self::assertSame(
-            ['14367733380732236000', '7300392645675467000', '725748519890628700', '7273985276702969000', '3377556719066259000', '2421799661623834600', '7586175759118006000', '13547762558345343000'],
+            ['14367733380732236000', '7300392645675467000', '725748519890628700', '7273985276702969000', '3377556719066259000', '2421799661623834600', '7586175759118006000'],
             array_map(static fn (Offer $o): string => $o->id(), $result->offers()),
         );
-        self::assertSame([], $result->skipped());
+        self::assertCount(1, $result->skipped());
+        self::assertStringContainsString('оффер «13547762558345343000»', $result->skipped()[0]);
+        self::assertStringContainsString('цена 0', $result->skipped()[0]);
         self::assertSame(5322, $result->total());
+    }
+
+    public function testParsesLiveEdgeFixture(): void
+    {
+        $result = self::edge();
+
+        self::assertSame(
+            ['13876006777101574000', '3394224451100314600', '2026950605734530000', '1732069055518743000', '10557192786987480000', '1074890176067626600'],
+            array_map(static fn (Offer $o): string => $o->id(), $result->offers()),
+        );
+        self::assertCount(1, $result->skipped());
+        self::assertStringContainsString('оффер «3234975053357548000»', $result->skipped()[0]);
+        self::assertStringContainsString('цена 0', $result->skipped()[0]);
+        self::assertNull($result->total());
+        foreach ($result->offers() as $offer) {
+            self::assertSame('RUB', $offer->price()->currency());
+        }
+    }
+
+    public function testDescriptionDoubleEscapedOnceFromLiveFixture(): void
+    {
+        $description = (string) self::edgeOffer('13876006777101574000')->description();
+
+        self::assertStringContainsString('винной кислоты &mdash; это шипучая кислота', $description);
+        self::assertStringNotContainsString('&amp;', $description);
+        self::assertStringNotContainsString('—', $description);
+    }
+
+    public function testLiveFixtureEntitiesDecoded(): void
+    {
+        $soap = (string) self::edgeOffer('3394224451100314600')->description();
+        self::assertStringStartsWith('• 100% французский бренд, 100% сделано во Франции<br/>• Независимый производитель', $soap);
+        self::assertStringNotContainsString('&lt;', $soap);
+
+        $mixer = (string) self::edgeOffer('2026950605734530000')->description();
+        self::assertStringContainsString('керамический вентиль 1/2"", 180°', $mixer);
+        self::assertStringNotContainsString('&quot;', $mixer);
+    }
+
+    public function testAdMarkingEntitiesDecoded(): void
+    {
+        $offer = self::single(self::offerXml([], [
+            'tagging_ads' => '<info><![CDATA[Реклама. Рекламодатель ООО &quot;Ромашка&quot; &laquo;Сад&raquo; ИНН 7700000000]]></info>',
+        ]));
+
+        self::assertSame('Реклама. Рекламодатель ООО "Ромашка" «Сад» ИНН 7700000000', $offer->adMarking());
+    }
+
+    public function testPlainAdMarkingNotDecodedAgain(): void
+    {
+        $offer = self::single(self::offerXml([], ['tagging_ads' => '<info>ООО &amp;quot;Ромашка&amp;quot;</info>']));
+
+        self::assertSame('ООО &quot;Ромашка&quot;', $offer->adMarking());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function currencies(): iterable
+    {
+        yield 'RUR' => ['RUR', 'RUB'];
+        yield 'rur' => ['rur', 'RUB'];
+        yield 'RUR с пробелами' => [' RUR ', 'RUB'];
+        yield 'rub' => ['rub', 'RUB'];
+        yield 'USD' => ['USD', 'USD'];
+    }
+
+    #[DataProvider('currencies')]
+    public function testCurrencyIsNormalized(string $currencyId, string $expected): void
+    {
+        $offer = self::single(self::offerXml([], ['currencyId' => $currencyId, 'oldprice' => '20', 'charge' => '1.5']));
+
+        self::assertSame($expected, $offer->price()->currency());
+        self::assertSame($expected, $offer->oldPrice()?->currency());
+        self::assertSame($expected, $offer->charge()?->currency());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function zeroPrices(): iterable
+    {
+        yield '0' => ['0'];
+        yield '0.0' => ['0.0'];
+        yield '0.00' => ['0.00'];
+    }
+
+    #[DataProvider('zeroPrices')]
+    public function testZeroPriceOfferIsSkipped(string $price): void
+    {
+        $xml = sprintf(self::HEAD, '2') . self::offerXml([], ['price' => $price, 'charge' => '13.65']) . self::VALID . '</offers></yml_catalog>';
+
+        $result = (new OfferXmlParser())->parse($xml, new SearchCriteria());
+
+        self::assertSame(['9'], array_map(static fn (Offer $o): string => $o->id(), $result->offers()));
+        self::assertSame(['оффер «7»: цена 0, оффер пропущен'], $result->skipped());
+    }
+
+    public function testPageOfZeroPricesIsEmptyNotBroken(): void
+    {
+        $xml = sprintf(self::HEAD, '82') . self::offerXml(['id' => '1'], ['price' => '0']) . self::offerXml(['id' => '2'], ['price' => '0.00'])
+            . '</offers></yml_catalog>';
+
+        $result = (new OfferXmlParser())->parse($xml, new SearchCriteria());
+
+        self::assertSame([], $result->offers());
+        self::assertCount(2, $result->skipped());
+        self::assertSame(82, $result->total());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function zeroCharges(): iterable
+    {
+        yield '0' => ['0'];
+        yield '0.00' => ['0.00'];
+    }
+
+    #[DataProvider('zeroCharges')]
+    public function testZeroChargeBecomesNull(string $charge): void
+    {
+        $offer = self::single(self::offerXml([], ['charge' => $charge]));
+
+        self::assertNull($offer->charge());
+        self::assertSame('10 RUB', (string) $offer->price());
+    }
+
+    public function testInvalidOptionalUrlsBecomeNull(): void
+    {
+        $offer = self::single(self::offerXml([], [
+            'picture' => 'javascript:alert(1)',
+            'thumbnail' => '/img/small.jpg',
+            'original_picture' => 'ftp://cdn.example.ru/a.png',
+            'destination-url-do-not-send-traffic' => '<![CDATA[data:text/html,x]]>',
+        ]));
+
+        self::assertNull($offer->picture());
+        self::assertNull($offer->thumbnail());
+        self::assertNull($offer->originalPicture());
+        self::assertNull($offer->productUrl());
+        self::assertSame([], $offer->pictureCandidates());
+    }
+
+    public function testEmptyPictureElements(): void
+    {
+        $offer = self::edgeOffer('1732069055518743000');
+
+        self::assertNull($offer->picture());
+        self::assertNull($offer->thumbnail());
+        self::assertNull($offer->originalPicture());
+        self::assertSame([], $offer->pictureCandidates());
+        self::assertNull($offer->charge());
+        self::assertSame('https://www.tutu.ru/', $offer->productUrl());
+    }
+
+    public function testHttpOriginalPictureKept(): void
+    {
+        $offer = self::edgeOffer('10557192786987480000');
+
+        self::assertSame('http://globaldrive.ru/upload/iblock/52a/ra9ou5fpl3qw06zreoe1394subz5tghx.jpg', $offer->originalPicture());
+        self::assertSame([
+            'http://globaldrive.ru/upload/iblock/52a/ra9ou5fpl3qw06zreoe1394subz5tghx.jpg',
+            'https://imgng.gdeslon.ru/commodities/504923255/pictures/f4b01e53c014813d697bb6f544f7ea4d/big.jpg',
+            'https://imgng.gdeslon.ru/commodities/504923255/pictures/f4b01e53c014813d697bb6f544f7ea4d/small.jpg',
+        ], $offer->pictureCandidates());
+        self::assertSame('2820.72 RUB', (string) $offer->charge());
+    }
+
+    public function testOfferWithoutOriginalPicture(): void
+    {
+        $offer = self::edgeOffer('1074890176067626600');
+
+        self::assertNull($offer->originalPicture());
+        self::assertNull($offer->thumbnail());
+        self::assertSame(['https://imgng.gdeslon.ru/commodities/477057687/pictures/None/big.jpg'], $offer->pictureCandidates());
     }
 
     public function testBasicOffer(): void
@@ -39,9 +217,9 @@ final class OfferXmlParserTest extends TestCase
         self::assertSame(107054, $offer->merchantId()->value());
         self::assertSame('578237', $offer->article());
         self::assertSame(26, $offer->categoryId()?->value());
-        self::assertSame('100 RUR', (string) $offer->price());
+        self::assertSame('100 RUB', (string) $offer->price());
         self::assertNull($offer->oldPrice());
-        self::assertSame('3.64 RUR', (string) $offer->charge());
+        self::assertSame('3.64 RUB', (string) $offer->charge());
         self::assertTrue($offer->isAvailable());
         self::assertSame('https://imgng.gdeslon.ru/commodities/406571949/pictures/75e8da9a3ca9e0c3a2dba8b146ddeb28/big.jpg', $offer->picture());
         self::assertSame('https://imgng.gdeslon.ru/commodities/406571949/pictures/75e8da9a3ca9e0c3a2dba8b146ddeb28/small.jpg', $offer->thumbnail());
@@ -66,16 +244,15 @@ final class OfferXmlParserTest extends TestCase
         self::assertNull($offer->oldPrice());
     }
 
-    public function testZeroPriceModelAndMarkdown(): void
+    public function testMarkdownDescriptionKeepsLineFeeds(): void
     {
-        $offer = self::offer('13547762558345343000');
+        $offer = self::single(self::offerXml([], [
+            'description' => "<![CDATA[**Dantex (Дантекс) DM-UDC045Z/DBF**\r\n\r\n- мощность &mdash; 4,5 кВт\r\n- класс A]]>",
+            'model' => '<![CDATA[DM-UDC045Z/DBF]]>',
+        ]));
 
-        self::assertTrue($offer->price()->isZero());
-        self::assertTrue($offer->charge()?->isZero());
         self::assertSame('DM-UDC045Z/DBF', $offer->model());
-        self::assertStringStartsWith('**Dantex (Дантекс) DM-UDC045Z/DBF**', (string) $offer->description());
-        self::assertStringContainsString("\n", (string) $offer->description());
-        self::assertStringNotContainsString("\r", (string) $offer->description());
+        self::assertSame("**Dantex (Дантекс) DM-UDC045Z/DBF**\n\n- мощность — 4,5 кВт\n- класс A", $offer->description());
     }
 
     public function testAliExpressOffer(): void
@@ -193,7 +370,10 @@ final class OfferXmlParserTest extends TestCase
         yield 'oldprice не число' => [self::offerXml([], ['oldprice' => 'x']), 'oldprice'];
         yield 'charge не число' => [self::offerXml([], ['charge' => 'x']), 'charge'];
         yield 'нет currencyId' => [self::offerXml([], ['currencyId' => null]), 'currencyId'];
-        yield 'currencyId строчными' => [self::offerXml([], ['currencyId' => 'rub']), 'rub'];
+        yield 'currencyId из двух букв' => [self::offerXml([], ['currencyId' => 'RU']), 'currencyId'];
+        yield 'currencyId кириллицей' => [self::offerXml([], ['currencyId' => 'РУБ']), 'currencyId'];
+        yield 'currencyId из четырёх букв' => [self::offerXml([], ['currencyId' => 'RUBL']), 'currencyId'];
+        yield 'пустой currencyId' => [self::offerXml([], ['currencyId' => ' ']), 'currencyId'];
         yield 'нет url' => [self::offerXml([], ['url' => null]), 'url'];
         yield 'url не http' => [self::offerXml([], ['url' => 'ftp://x']), 'ссылка'];
         yield 'категория с буквами' => [self::offerXml(['gs_category_id' => 'abc']), 'gs_category_id'];
@@ -270,6 +450,22 @@ final class OfferXmlParserTest extends TestCase
     private static function offer(string $id): Offer
     {
         foreach (self::fixture()->offers() as $offer) {
+            if ($offer->id() === $id) {
+                return $offer;
+            }
+        }
+
+        throw new \LogicException('Нет оффера ' . $id);
+    }
+
+    private static function edge(): SearchResult
+    {
+        return (new OfferXmlParser())->parse(Fixtures::read('search/search-edge.xml'), new SearchCriteria());
+    }
+
+    private static function edgeOffer(string $id): Offer
+    {
+        foreach (self::edge()->offers() as $offer) {
             if ($offer->id() === $id) {
                 return $offer;
             }

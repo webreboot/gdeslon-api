@@ -82,6 +82,11 @@ gdeslon [опции] <команда> [подкоманда] [аргументы
 | `--sort=price\|partner-benefit\|newest` | порядок |
 | `--parked-domain=URL` | припаркованный домен для ссылок |
 
+Офферы с ценой 0 в выдачу не попадают: они в `skipped` и в предупреждении stderr. Поэтому на странице может быть
+меньше `--limit` офферов или ни одного — тогда таблицы нет, но строка «Страница N · …» подсказывает `--page` следующей
+страницы (в JSON — `next_page`). «Ничего не найдено.» выводится, только когда следующей страницы нет.
+«—» в колонке «Вознагр.» — API не рассчитало вознаграждение (в ответе `0`).
+
 ### `orders`
 
 Заказы вебмастера, нужны `GDESLON_USER_ID` и `GDESLON_API_KEY`. По умолчанию — созданные за 30 дней по московскому
@@ -150,11 +155,16 @@ MCP-сервер для AI-агентов: читает JSON-RPC из stdin, о�
 Данные — в stdout, сообщения и ошибки — в stderr. Таблицы — для людей, их вид может меняться. Для скриптов —
 `--format=json`: корень всегда объект, ключи в snake_case, ключ присутствует всегда (нет значения — `null`).
 
-- Деньги — `{"amount": "1999.99", "currency": "RUB"}` (строка, без float); сумма заявки — строка `"554.34"`.
+- Деньги — `{"amount": "1999.99", "currency": "RUB"}` (строка, без float); сумма заявки — строка `"554.34"`. Код валюты —
+  три заглавные латинские буквы; устаревший `RUR` из ответов API выводится как `RUB`.
 - Моменты — ISO 8601 со смещением (`2026-10-07T13:00:00+03:00`), даты — `ГГГГ-ММ-ДД`.
 - Перечисления: `state` заказа `new|cancelled|pending|confirmed|paid`, `type` `product|lead`, `claim_state`
   `in_work|closed`, `order_status` `waiting|confirmed|declined`, `rate_type` `percent|fixed`.
-- `skipped` — записи ответа с битыми данными (они же — предупреждением в stderr).
+- `skipped` — пропущенные записи ответа с причинами: битые данные, у поиска — ещё офферы с ценой 0. В stderr —
+  предупреждение «Пропущено записей: N» и первые причины.
+- Тексты — plain text: HTML-сущности из ответа раскодированы, но в описаниях бывает разметка (`<br/>`) —
+  экранируйте при выводе в HTML. Адреса (картинки, ссылки, логотипы) тоже экранируйте в HTML-атрибутах: проверяются
+  только схема http(s) и хост, кавычки и пробелы в пути возможны.
 
 | Команда | Корень JSON |
 |---|---|
@@ -188,9 +198,11 @@ string, `description` string, `conditions` string, `logo_url` ?string, `country`
 **Поиск** (корень `search`): `query` ?string, `page` int, `limit` int, `total` ?int, `next_page` ?int (номер
 следующей страницы для `--page`), `offers` [оффер], `skipped` [string].
 
-**Оффер** (`offers[]`): `id` string, `merchant_id` int, `name` string, `price` money, `old_price` ?money, `charge`
-?money (вознаграждение), `affiliate_link` string, `article` ?string, `category_id` ?int, `available` bool, `picture`,
-`thumbnail`, `original_picture`, `description`, `vendor`, `model`, `product_url`, `ad_marking` — ?string.
+**Оффер** (`offers[]`): `id` string, `merchant_id` int, `name` string, `price` money (больше нуля), `old_price` ?money,
+`charge` ?money (вознаграждение; `null` — API не рассчитало, в ответе `0`), `affiliate_link` string, `article` ?string,
+`category_id` ?int, `available` bool, `picture`, `thumbnail`, `original_picture`, `description`, `vendor`, `model`,
+`product_url`, `ad_marking` — ?string. Адреса `picture`, `thumbnail`, `original_picture`, `product_url` — только
+http(s), иначе `null`; так же `logo_url` магазина.
 
 **Заказ** (`orders[]`): `id` string, `merchant_id` int, `merchant_name` ?string, `state` string, `type` string,
 `reward` money, `amount` ?money (у лида — `null`), `merchant_order_number` ?string, `sub_id` ?string, `affiliate_id`

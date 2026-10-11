@@ -34,7 +34,8 @@ final class HttpProductCatalogTest extends TestCase
 
         $result = self::catalog($transport)->search(new SearchCriteria());
 
-        self::assertCount(8, $result);
+        self::assertCount(7, $result);
+        self::assertCount(1, $result->skipped());
         self::assertCount(1, $transport->requests());
         $request = $transport->lastRequest();
         self::assertSame('GET', $request->method());
@@ -240,7 +241,8 @@ final class HttpProductCatalogTest extends TestCase
 
         $result = (new HttpProductCatalog(new ApiClient(new RangeTransport($express)), self::TOKEN))->search(new SearchCriteria());
 
-        self::assertCount(8, $result);
+        self::assertCount(7, $result);
+        self::assertCount(1, $result->skipped());
         self::assertCount(1, $express->requests);
         self::assertSame('bytes=0-16383', $express->requests[0]->header('Range'));
         self::assertSame('close', $express->requests[0]->header('Connection'));

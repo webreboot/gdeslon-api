@@ -52,6 +52,32 @@ final class SimpleXml
         return $text === null ? null : trim($text);
     }
 
+    public static function decodedText(\SimpleXMLElement $element, string $name): ?string
+    {
+        $child = self::child($element, $name);
+        $text = self::text($element, $name);
+        if ($child === null || $text === null) {
+            return null;
+        }
+
+        $xml = (string) $child->asXML();
+        if (!str_contains($xml, '<![CDATA[')) {
+            return $text;
+        }
+        if (preg_match('~\A<[^>]*>(?:\s*<!\[CDATA\[(?:(?!\]\]>).)*+\]\]>)+\s*</[^>]*>\z~s', $xml) === 1) {
+            return self::decodeEntities($text);
+        }
+
+        return self::decodeCdataSections($xml) ?? $text;
+    }
+
+    public static function decodedOptional(\SimpleXMLElement $element, string $name): ?string
+    {
+        $text = self::decodedText($element, $name);
+
+        return $text === null ? null : trim($text);
+    }
+
     public static function attribute(\SimpleXMLElement $element, string $name): ?string
     {
         $attributes = $element->attributes();
@@ -76,5 +102,38 @@ final class SimpleXml
         }
 
         return array_values(array_filter(array_map('trim', explode($separator, $value)), static fn (string $item): bool => $item !== ''));
+    }
+
+    private static function decodeCdataSections(#[\SensitiveParameter] string $xml): ?string
+    {
+        $reader = new \XMLReader();
+        $previous = libxml_use_internal_errors(true);
+        try {
+            // asXML() элемента (не корня) пишет UTF-8 при любой кодировке документа
+            if (!$reader->XML($xml, 'UTF-8', LIBXML_NONET)) {
+                return null;
+            }
+            $text = '';
+            while ($reader->read()) {
+                if ($reader->depth !== 1) {
+                    continue;
+                }
+                if ($reader->nodeType === \XMLReader::CDATA) {
+                    $text .= self::decodeEntities($reader->value);
+                } elseif (in_array($reader->nodeType, [\XMLReader::TEXT, \XMLReader::WHITESPACE, \XMLReader::SIGNIFICANT_WHITESPACE], true)) {
+                    $text .= $reader->value;
+                }
+            }
+
+            return $text;
+        } finally {
+            $reader->close();
+            libxml_use_internal_errors($previous);
+        }
+    }
+
+    private static function decodeEntities(string $text): string
+    {
+        return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 }

@@ -164,6 +164,113 @@ final class CouponXmlParserTest extends TestCase
         return (new CouponXmlParser())->parse(Fixtures::read('coupons/' . $fixture), new CouponCriteria());
     }
 
+    public function testCdataTextsDecoded(): void
+    {
+        $list = self::parseXml(self::document(
+            self::coupon([
+                'name' => '<![CDATA[Скидка 10&#37; на &laquo;всё&raquo;]]>',
+                'description' => '<![CDATA[Только&nbsp;сегодня&lt;br/&gt;&mdash; до 31.12]]>',
+                'instruction' => '<![CDATA[Введите код &quot;в корзине&quot;]]>',
+                'tagging_ads' => '<![CDATA[Реклама. Рекламодатель ООО &quot;Пример&quot; ИНН 7700000099]]>',
+            ]),
+            merchantName: '<![CDATA[Магазин &quot;Слон&quot;]]>',
+            categoryName: '<![CDATA[Дом &amp; сад]]>',
+        ));
+
+        $coupon = $list->find(500001);
+        self::assertNotNull($coupon);
+        self::assertSame('Скидка 10% на «всё»', $coupon->name());
+        self::assertSame("Только\u{00A0}сегодня<br/>— до 31.12", $coupon->description());
+        self::assertSame('Введите код "в корзине"', $coupon->instruction());
+        self::assertSame('Реклама. Рекламодатель ООО "Пример" ИНН 7700000099', $coupon->adMarking());
+        self::assertSame('Магазин "Слон"', $coupon->merchantName());
+        self::assertSame('Дом & сад', $coupon->categories()[0]->name());
+    }
+
+    public function testCodeAndLinksNotDecoded(): void
+    {
+        $link = 'http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/500001?kc=A&amp;erid=2SDnjTEST900';
+        $coupon = self::parseXml(self::document(self::coupon([
+            'code' => '<![CDATA[A&amp;B]]>',
+            'url' => '<![CDATA[' . $link . ']]>',
+            'url-with-code' => '<![CDATA[' . $link . ']]>',
+        ])))->find(500001);
+
+        self::assertNotNull($coupon);
+        self::assertSame('A&amp;B', $coupon->code());
+        self::assertSame($link, $coupon->affiliateLink());
+        self::assertSame($link, $coupon->affiliateLinkWithCode());
+    }
+
+    public function testKindMatchedAfterDecoding(): void
+    {
+        $kinds = '<kind><id>1</id><name><![CDATA[Скидка &laquo;1+1&raquo;]]></name></kind><kind><id>2</id><name>Подарок &amp; бонус</name></kind>';
+        $list = self::parseXml(self::document(
+            self::coupon(['kind' => '<![CDATA[Скидка &laquo;1+1&raquo;]]>'])
+            . self::coupon(['id' => '500002', 'kind' => 'Скидка «1+1»'])
+            . self::coupon(['id' => '500003', 'kind' => '<![CDATA[Подарок &amp; бонус]]>']),
+            kinds: $kinds,
+        ));
+
+        self::assertSame([], $list->skipped());
+        self::assertSame(['Скидка «1+1»', 'Подарок & бонус'], array_map(static fn (CouponKind $k): string => $k->name(), $list->kinds()));
+        self::assertSame(1, $list->find(500001)?->kind()->id());
+        self::assertSame(1, $list->find(500002)?->kind()->id());
+        self::assertSame(2, $list->find(500003)?->kind()->id());
+    }
+
+    public function testPlainTextNotDoubleDecoded(): void
+    {
+        $coupon = self::parseXml(self::document(self::coupon([
+            'name' => 'Скидка &amp;quot;X&amp;quot;',
+            'description' => '10&amp;#37; &amp; бонус',
+        ])))->find(500001);
+
+        self::assertNotNull($coupon);
+        self::assertSame('Скидка &quot;X&quot;', $coupon->name());
+        self::assertSame('10&#37; & бонус', $coupon->description());
+    }
+
+    private static function parseXml(string $xml): CouponList
+    {
+        return (new CouponXmlParser())->parse($xml, new CouponCriteria());
+    }
+
+    private static function document(
+        string $coupons,
+        string $merchantName = 'elementaree.ru',
+        string $categoryName = 'Питание',
+        string $kinds = '<kind><id>1</id><name>скидка на заказ</name></kind>',
+    ): string {
+        return '<?xml version="1.0" encoding="utf-8"?><gdeslon-coupons>'
+            . '<coupon-categories><coupon-category><id>351</id><name>' . $categoryName . '</name></coupon-category></coupon-categories>'
+            . '<merchants><merchant><url>https://elementaree.ru/</url><name>' . $merchantName . '</name><id>99157</id></merchant></merchants>'
+            . '<kinds>' . $kinds . '</kinds><coupons>' . $coupons . '</coupons></gdeslon-coupons>';
+    }
+
+    /**
+     * @param array<string, string> $fields
+     */
+    private static function coupon(array $fields = []): string
+    {
+        $fields += [
+            'id' => '500001',
+            'merchant-id' => '99157',
+            'name' => 'Скидка',
+            'kind' => 'скидка на заказ',
+            'start-at' => '2026-01-01 00:00:00',
+            'finish-at' => '2026-12-31 23:59:59',
+            'url' => 'http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/500001?erid=2SDnjTEST900',
+            'coupon-categories' => '<coupon-category><id>351</id></coupon-category>',
+        ];
+        $xml = '<coupon>';
+        foreach ($fields as $name => $value) {
+            $xml .= sprintf('<%1$s>%2$s</%1$s>', $name, $value);
+        }
+
+        return $xml . '</coupon>';
+    }
+
     public function testBrokenDictionaryEntriesDoNotBreakCoupons(): void
     {
         $xml = str_replace(

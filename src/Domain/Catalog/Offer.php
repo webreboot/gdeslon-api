@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Catalog;
 
+use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
@@ -46,13 +47,21 @@ final class Offer
         if ($name === '') {
             throw new InvalidArgumentException(sprintf('Пустое название оффера %s', $id));
         }
-        if (preg_match('~^https?://[^\s/?#]+~i', $affiliateLink) !== 1) {
+        if (!HttpUrl::isValid($affiliateLink)) {
             throw new InvalidArgumentException(sprintf('Партнёрская ссылка оффера %s: ожидался адрес http(s)://', $id));
+        }
+        foreach (['picture' => $picture, 'thumbnail' => $thumbnail, 'originalPicture' => $originalPicture, 'productUrl' => $productUrl] as $field => $url) {
+            if ($url !== null && !HttpUrl::isValid($url)) {
+                throw new InvalidArgumentException(sprintf('Оффер %s: %s — ожидался адрес http(s)://', $id, $field));
+            }
         }
         foreach (['старая цена' => $oldPrice, 'вознаграждение' => $charge] as $what => $money) {
             if ($money !== null && $money->currency() !== $price->currency()) {
                 throw new InvalidArgumentException(sprintf('Оффер %s: %s в %s, а цена в %s', $id, $what, $money->currency(), $price->currency()));
             }
+        }
+        if ($charge !== null && $charge->isZero()) {
+            throw new InvalidArgumentException(sprintf('Оффер %s: нулевое вознаграждение, ожидался null', $id));
         }
 
         $this->name = $name;
@@ -150,6 +159,17 @@ final class Offer
     public function adMarking(): ?string
     {
         return $this->adMarking;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function pictureCandidates(): array
+    {
+        return array_values(array_unique(array_filter(
+            [$this->originalPicture, $this->picture, $this->thumbnail],
+            static fn (?string $url): bool => $url !== null,
+        )));
     }
 
     private static function text(?string $value): ?string

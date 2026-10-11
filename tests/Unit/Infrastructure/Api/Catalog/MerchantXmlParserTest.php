@@ -79,6 +79,94 @@ final class MerchantXmlParserTest extends TestCase
 
         self::assertSame('5ka.ru (Android & IOS)', $m->name());
         self::assertSame('Заказ от "Новичок 365"', $m->tariffs()[2]->title());
+        self::assertStringContainsString('AliExpress RU&CIS (Россия и СНГ)', self::fixture()->get(82012)->description());
+    }
+
+    public function testCdataTextsDecoded(): void
+    {
+        $m = (new MerchantXmlParser())->parse(self::shops(
+            '<shop><id>7</id><name><![CDATA[Магазин &quot;Слон&quot;]]></name><url><![CDATA[https://x.ru/?a=1&amp;b=2]]></url>'
+            . '<short-description><![CDATA[Скидки до 50&#37;]]></short-description>'
+            . '<description><![CDATA[**О магазине** &laquo;Слон&raquo;&nbsp;&mdash; всё]]></description>'
+            . '<conditions><![CDATA[Нельзя&nbsp;&lt;br/&gt;дорвеи]]></conditions>'
+            . '<gs-commission-mark><![CDATA[до 10&#37;]]></gs-commission-mark>'
+            . '<kind><![CDATA[Товары &amp; услуги]]></kind>'
+            . '<country><![CDATA[r&amp;u]]></country>'
+            . '<tagging_ads><![CDATA[Реклама. ООО &quot;Слон&quot;]]></tagging_ads>'
+            . '<affiliate-link><![CDATA[https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=&amp;mid=7]]></affiliate-link>'
+            . '<categories><category><id>5</id><name><![CDATA[Дом &amp; сад]]></name></category></categories>'
+            . '<traffic-types><traffic-type><name><![CDATA[Дорвеи &laquo;серые&raquo;]]></name><allowed>no</allowed></traffic-type></traffic-types>'
+            . '</shop>',
+        ))->get(7);
+
+        self::assertSame('Магазин "Слон"', $m->name());
+        self::assertSame('Скидки до 50%', $m->shortDescription());
+        self::assertSame("**О магазине** «Слон»\u{00A0}— всё", $m->description());
+        self::assertSame("Нельзя\u{00A0}<br/>дорвеи", $m->conditions());
+        self::assertSame('до 10%', $m->commissionSummary());
+        self::assertSame('Товары & услуги', $m->kind());
+        self::assertSame('Реклама. ООО "Слон"', $m->adMarking());
+        self::assertSame('Дом & сад', $m->categories()[0]->name());
+        self::assertSame(['Дорвеи «серые»'], $m->forbiddenTrafficTypes());
+        self::assertSame('https://x.ru/?a=1&amp;b=2', $m->url());
+        self::assertSame('https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=&amp;mid=7', $m->affiliateLink());
+        self::assertSame('r&amp;u', $m->country());
+    }
+
+    public function testPlainTextNotDoubleDecoded(): void
+    {
+        $m = (new MerchantXmlParser())->parse(self::shops(
+            '<shop><id>7</id><name>ООО &amp;quot;Слон&amp;quot;</name><url>https://x.ru/</url>'
+            . '<description>Скидка 10&amp;#37; &amp; бонус</description><tagging_ads>ООО &amp;laquo;Слон&amp;raquo;</tagging_ads></shop>',
+        ))->get(7);
+
+        self::assertSame('ООО &quot;Слон&quot;', $m->name());
+        self::assertSame('Скидка 10&#37; & бонус', $m->description());
+        self::assertSame('ООО &laquo;Слон&raquo;', $m->adMarking());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidLogos(): iterable
+    {
+        yield 'javascript' => ['javascript:alert(1)'];
+        yield 'data' => ['data:image/png;base64,AAAA'];
+    }
+
+    #[DataProvider('invalidLogos')]
+    public function testJavascriptLogoBecomesNull(string $logo): void
+    {
+        $list = (new MerchantXmlParser())->parse(self::shops(
+            '<shop><id>7</id><name>x</name><url>https://x.ru/</url><logo-file-name>' . $logo . '</logo-file-name></shop>',
+        ));
+
+        self::assertNull($list->get(7)->logoUrl());
+        self::assertSame([], $list->skipped());
+    }
+
+    public function testInvalidAffiliateLinkIsNotEchoedInSkipReason(): void
+    {
+        $list = (new MerchantXmlParser())->parse(self::shops(
+            '<shop><id>7</id><name>x</name><url>https://x.ru/</url><affiliate-link>sf.gdeslon.ru/cf/0a1b2c3d4e?mid=7</affiliate-link></shop>'
+            . '<shop><id>8</id><name>y</name><url>https://y.ru/</url></shop>',
+        ));
+
+        self::assertCount(1, $list->skipped());
+        self::assertStringContainsString('Партнёрская ссылка магазина 7', $list->skipped()[0]);
+        self::assertStringNotContainsString('0a1b2c3d4e', $list->skipped()[0]);
+    }
+
+    public function testRelativeLogoBecomesNull(): void
+    {
+        $list = (new MerchantXmlParser())->parse(self::shops(
+            '<shop><id>7</id><name>x</name><url>https://x.ru/</url><logo-file-name>/system/logos/7.png</logo-file-name></shop>'
+            . '<shop><id>8</id><name>y</name><url>https://y.ru/</url><logo-file-name> https://www.gdeslon.ru/system/logos/8.png </logo-file-name></shop>',
+        ));
+
+        self::assertNull($list->get(7)->logoUrl());
+        self::assertSame('https://www.gdeslon.ru/system/logos/8.png', $list->get(8)->logoUrl());
+        self::assertSame([], $list->skipped());
     }
 
     public function testTrafficCategoriesOfTariffs(): void

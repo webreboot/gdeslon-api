@@ -66,7 +66,7 @@ final class CommandContext
         if ($skipped === []) {
             return;
         }
-        $this->notice(sprintf('Пропущено записей с битыми данными: %d', count($skipped)));
+        $this->notice(sprintf('Пропущено записей: %d', count($skipped)));
         foreach (array_slice($skipped, 0, self::SKIPPED_SHOWN) as $reason) {
             $this->notice('  ' . $reason);
         }

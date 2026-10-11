@@ -51,17 +51,19 @@ final class JsonSchemaTest extends TestCase
 
     public function testSearch(): void
     {
-        $result = (new OfferXmlParser())->parse(Fixtures::read('search/search.xml'), new SearchCriteria(query: 'платье', limit: 8));
+        foreach (['search/search.xml', 'search/search-edge.xml'] as $fixture) {
+            $result = (new OfferXmlParser())->parse(Fixtures::read($fixture), new SearchCriteria(query: 'платье', limit: 8));
 
-        self::assertShape([
-            'query' => 'string|null',
-            'page' => 'int',
-            'limit' => 'int',
-            'total' => 'int|null',
-            'next_page' => 'int|null',
-            'offers' => ['[]' => JsonShapes::OFFER],
-            'skipped' => ['[]' => 'string'],
-        ], CatalogNormalizer::searchResult($result));
+            self::assertShape([
+                'query' => 'string|null',
+                'page' => 'int',
+                'limit' => 'int',
+                'total' => 'int|null',
+                'next_page' => 'int|null',
+                'offers' => ['[]' => JsonShapes::OFFER],
+                'skipped' => ['[]' => 'string'],
+            ], CatalogNormalizer::searchResult($result), $fixture);
+        }
     }
 
     public function testOrders(): void

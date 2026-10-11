@@ -204,7 +204,8 @@ final class GdeSlonTest extends TestCase
 
         $result = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport)->search('iphone -pink');
 
-        self::assertCount(8, $result);
+        self::assertCount(7, $result);
+        self::assertCount(1, $result->skipped());
         self::assertSame('secret-token', $transport->lastRequest()->query()['_gs_at'] ?? null);
         self::assertSame('iphone -pink', $transport->lastRequest()->query()['q'] ?? null);
         self::assertSame('iphone -pink', $result->criteria()->query());

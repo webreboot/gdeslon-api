@@ -104,4 +104,121 @@ final class OfferTest extends TestCase
         self::assertNull($offer->model());
         self::assertNull($offer->adMarking());
     }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function zeroCharges(): iterable
+    {
+        yield 'ноль' => ['0'];
+        yield 'ноль с копейками' => ['0.00'];
+    }
+
+    #[DataProvider('zeroCharges')]
+    public function testZeroChargeIsRejected(string $amount): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('вознаграждение');
+
+        new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, charge: new Money($amount, 'RUB'));
+    }
+
+    public function testNonZeroChargeIsAccepted(): void
+    {
+        $offer = new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, charge: new Money('0.01', 'RUB'));
+
+        self::assertSame('0.01 RUB', (string) $offer->charge());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function invalidOptionalUrls(): iterable
+    {
+        foreach (['picture', 'thumbnail', 'originalPicture', 'productUrl'] as $field) {
+            yield $field . ': javascript' => [$field, 'javascript:alert(1)'];
+            yield $field . ': относительный' => [$field, '/img/a.jpg'];
+            yield $field . ': пусто' => [$field, ''];
+        }
+    }
+
+    #[DataProvider('invalidOptionalUrls')]
+    public function testOptionalUrlsMustBeHttp(string $field, string $url): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('http(s)://');
+
+        $urls = array_replace(['picture' => null, 'thumbnail' => null, 'originalPicture' => null, 'productUrl' => null], [$field => $url]);
+
+        new Offer(
+            '1',
+            new MerchantId(1),
+            'x',
+            new Money('1', 'RUB'),
+            self::LINK,
+            picture: $urls['picture'],
+            thumbnail: $urls['thumbnail'],
+            originalPicture: $urls['originalPicture'],
+            productUrl: $urls['productUrl'],
+        );
+    }
+
+    public function testHttpOptionalUrlsAreKept(): void
+    {
+        $offer = new Offer(
+            '1',
+            new MerchantId(1),
+            'x',
+            new Money('1', 'RUB'),
+            self::LINK,
+            picture: 'https://imgng.gdeslon.ru/p/big.jpg',
+            thumbnail: 'https://imgng.gdeslon.ru/p/small.jpg',
+            originalPicture: 'http://cdn.example.ru/a.png',
+            productUrl: 'https://example.ru/item/1',
+        );
+
+        self::assertSame('https://imgng.gdeslon.ru/p/big.jpg', $offer->picture());
+        self::assertSame('https://imgng.gdeslon.ru/p/small.jpg', $offer->thumbnail());
+        self::assertSame('http://cdn.example.ru/a.png', $offer->originalPicture());
+        self::assertSame('https://example.ru/item/1', $offer->productUrl());
+    }
+
+    /**
+     * @return iterable<string, array{?string, ?string, ?string, list<string>}>
+     */
+    public static function pictureSets(): iterable
+    {
+        yield 'все три' => ['https://p/big.jpg', 'https://p/small.jpg', 'https://o/a.png', ['https://o/a.png', 'https://p/big.jpg', 'https://p/small.jpg']];
+        yield 'без оригинала' => ['https://p/big.jpg', 'https://p/small.jpg', null, ['https://p/big.jpg', 'https://p/small.jpg']];
+        yield 'только миниатюра' => [null, 'https://p/small.jpg', null, ['https://p/small.jpg']];
+        yield 'только оригинал' => [null, null, 'http://o/a.png', ['http://o/a.png']];
+        yield 'без картинок' => [null, null, null, []];
+    }
+
+    /**
+     * @param list<string> $expected
+     */
+    #[DataProvider('pictureSets')]
+    public function testPictureCandidatesOrderAndFallbacks(?string $picture, ?string $thumbnail, ?string $original, array $expected): void
+    {
+        $offer = new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, picture: $picture, thumbnail: $thumbnail, originalPicture: $original);
+
+        self::assertSame($expected, $offer->pictureCandidates());
+    }
+
+    public function testPictureCandidatesAreUnique(): void
+    {
+        $offer = new Offer(
+            '1',
+            new MerchantId(1),
+            'x',
+            new Money('1', 'RUB'),
+            self::LINK,
+            picture: 'https://p/big.jpg',
+            thumbnail: 'https://p/big.jpg',
+            originalPicture: 'https://p/big.jpg',
+        );
+
+        self::assertSame(['https://p/big.jpg'], $offer->pictureCandidates());
+    }
 }

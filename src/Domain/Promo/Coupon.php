@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Webreboot\GdeSlon\Domain\Promo;
 
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
+use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class Coupon
@@ -192,7 +193,7 @@ final class Coupon
 
     private static function assertLink(string $link, CouponId $id): void
     {
-        if (preg_match('~^https?://[^\s/?#]+~i', $link) !== 1) {
+        if (!HttpUrl::isValid($link)) {
             throw new InvalidArgumentException(sprintf('Купон %s: партнёрская ссылка должна начинаться с http(s)://', $id));
         }
     }

@@ -105,7 +105,7 @@ final class CouponXmlParser
         $rawId = self::text($coupon, 'id');
         $label = $rawId !== null && preg_match('/^\d{1,18}\z/', trim($rawId)) === 1 ? sprintf('купон %s', trim($rawId)) : sprintf('купон №%d', $position);
         try {
-            $kindName = trim((string) self::text($coupon, 'kind'));
+            $kindName = trim((string) SimpleXml::decodedText($coupon, 'kind'));
             $kind = $kinds[$kindName] ?? throw new UnexpectedResponseException(sprintf('вид «%s» не из справочника видов', $kindName));
 
             $couponCategories = [];
@@ -121,18 +121,18 @@ final class CouponXmlParser
             return new Coupon(
                 id: self::positiveInt($coupon, 'id'),
                 merchantId: $merchantId,
-                name: (string) self::text($coupon, 'name'),
+                name: (string) SimpleXml::decodedText($coupon, 'name'),
                 kind: $kind,
                 startsAt: self::date($coupon, 'start-at'),
                 endsAt: self::date($coupon, 'finish-at'),
                 affiliateLink: self::text($coupon, 'url') ?? throw new UnexpectedResponseException('url: нет партнёрской ссылки'),
                 merchantName: $merchants[$merchantId] ?? null,
-                description: (string) self::text($coupon, 'description'),
-                instruction: self::text($coupon, 'instruction'),
+                description: (string) SimpleXml::decodedText($coupon, 'description'),
+                instruction: SimpleXml::decodedText($coupon, 'instruction'),
                 code: self::text($coupon, 'code'),
                 categories: $couponCategories,
                 affiliateLinkWithCode: self::text($coupon, 'url-with-code'),
-                adMarking: self::text($coupon, 'tagging_ads'),
+                adMarking: SimpleXml::decodedText($coupon, 'tagging_ads'),
             );
         } catch (UnexpectedResponseException | InvalidArgumentException $e) {
             throw new UnexpectedResponseException(sprintf('%s: %s', $label, $e->getMessage()));
@@ -184,7 +184,7 @@ final class CouponXmlParser
 
     private static function required(\SimpleXMLElement $element, string $name): string
     {
-        $value = trim((string) self::text($element, $name));
+        $value = trim((string) SimpleXml::decodedText($element, $name));
         if ($value === '') {
             throw new UnexpectedResponseException(sprintf('%s: пустое поле', $name));
         }

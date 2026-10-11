@@ -6,6 +6,8 @@ namespace Webreboot\GdeSlon\Interface\Postback;
 
 use Webreboot\GdeSlon\Domain\Sales\Conversion;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
+use Webreboot\GdeSlon\Domain\Shared\Currency;
+use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 /** @internal */
 final class ConversionMapper
@@ -168,12 +170,11 @@ final class ConversionMapper
 
     private static function currency(string $value): string
     {
-        $currency = trim($value);
-        if (preg_match('/^[A-Za-z]{3}\z/', $currency) !== 1) {
+        try {
+            return Currency::normalize($value);
+        } catch (InvalidArgumentException) {
             throw new \UnexpectedValueException(sprintf('ожидался код валюты из трёх латинских букв, получено «%s»', PostbackText::safe($value)));
         }
-
-        return strtoupper($currency);
     }
 
     private static function time(string $value): \DateTimeImmutable

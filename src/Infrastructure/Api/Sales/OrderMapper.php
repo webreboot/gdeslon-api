@@ -9,6 +9,7 @@ use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderList;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Domain\Sales\OrderType;
+use Webreboot\GdeSlon\Domain\Shared\Currency;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
@@ -149,11 +150,11 @@ final class OrderMapper
     private static function currency(array $record): string
     {
         $value = $record['currency'] ?? null;
-        if (is_string($value) && preg_match('/^\s*[A-Za-z]{3}\s*$/', $value) === 1) {
-            return strtoupper(trim($value));
+        try {
+            return Currency::normalize(is_string($value) ? $value : '');
+        } catch (InvalidArgumentException) {
+            throw new UnexpectedResponseException(sprintf('currency: ожидался код валюты из трёх латинских букв, получен %s', self::describe($value)));
         }
-
-        throw new UnexpectedResponseException(sprintf('currency: ожидался код валюты из трёх латинских букв, получен %s', self::describe($value)));
     }
 
     /**

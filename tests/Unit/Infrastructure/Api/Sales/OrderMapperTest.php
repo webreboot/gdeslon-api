@@ -142,6 +142,28 @@ final class OrderMapperTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function currencies(): iterable
+    {
+        yield 'RUR' => ['RUR', 'RUB'];
+        yield 'rur' => ['rur', 'RUB'];
+        yield 'rur с пробелами' => [' rur ', 'RUB'];
+        yield 'rub' => ['rub', 'RUB'];
+        yield 'usd' => ['usd', 'USD'];
+    }
+
+    #[DataProvider('currencies')]
+    public function testLegacyRurBecomesRub(string $currency, string $expected): void
+    {
+        $order = self::map([self::valid('1', ['currency' => $currency])])->find('1');
+
+        self::assertNotNull($order);
+        self::assertSame($expected, $order->reward()->currency());
+        self::assertSame($expected, $order->amount()?->currency());
+    }
+
     public function testUnknownFieldsAreIgnoredAndAmountsTrimmed(): void
     {
         $order = self::order('81234570');

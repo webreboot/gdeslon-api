@@ -168,7 +168,15 @@ final class CatalogCommandsTest extends TestCase
         $data = self::json($cli->stdout);
         self::assertSame(2, $data['next_page']);
         self::assertIsArray($data['offers']);
-        self::assertCount(8, $data['offers']);
+        self::assertCount(7, $data['offers']);
+        self::assertIsArray($data['skipped']);
+        self::assertCount(1, $data['skipped']);
+        self::assertIsArray($data['offers'][0]);
+        self::assertSame(['amount' => '100', 'currency' => 'RUB'], $data['offers'][0]['price']);
+        self::assertIsArray($data['offers'][2]);
+        self::assertNull($data['offers'][2]['charge']);
+        self::assertStringContainsString('Пропущено записей: 1', $cli->stderr);
+        self::assertStringContainsString('цена 0', $cli->stderr);
 
         $cli = self::cli(200, Fixtures::read('search/search-empty.xml'));
         self::assertSame(0, $cli->run(['search', 'nothing'], self::TOKEN));
@@ -192,6 +200,22 @@ final class CatalogCommandsTest extends TestCase
         $cli = self::cli(404, "There have been validation errors: [ { param: '_gs_at', msg: 'Invalid value', value: 'secret-token-0123' } ]");
         self::assertSame(3, $cli->run(['search', 'x'], self::TOKEN));
         self::assertStringNotContainsString('secret-token-0123', $cli->stdout . $cli->stderr);
+    }
+
+    public function testPageOfZeroPricesShowsNextPage(): void
+    {
+        $offer = '<offer merchant_id="1" id="%d"><price>0</price><currencyId>RUR</currencyId><name><![CDATA[x]]></name>'
+            . '<url>https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1</url></offer>';
+        $xml = '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE yml_catalog SYSTEM "shops.dtd"><yml_catalog date="2026-10-11 10:09:18">'
+            . '<info><documents_number>82</documents_number></info><offers>' . sprintf($offer, 1) . sprintf($offer, 2) . '</offers></yml_catalog>';
+
+        $cli = self::cli(200, $xml);
+        self::assertSame(0, $cli->run(['search', 'курс', '--limit=2'], self::TOKEN), $cli->stderr);
+
+        self::assertStringContainsString('--page=2', $cli->stdout);
+        self::assertStringContainsString('найдено 82', $cli->stdout);
+        self::assertStringNotContainsString('Ничего не найдено.', $cli->stderr);
+        self::assertStringContainsString('Пропущено записей: 2', $cli->stderr);
     }
 
     private static function cli(int $status, string $body): CliTester

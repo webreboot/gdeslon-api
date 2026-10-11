@@ -162,7 +162,14 @@ final class ConversionMapperTest extends TestCase
         self::assertSame('0', $conversion->reward());
         self::assertSame('1999.90', $conversion->orderSum(), 'как есть, без нормализации');
         self::assertSame('RUB', $conversion->currency());
-        self::assertSame('RUR', self::map(['merchant_id' => '1', 'state' => '3', 'currency' => 'RUR'])[0]->currency());
+        self::assertSame('RUB', self::map(['merchant_id' => '1', 'state' => '3', 'currency' => 'RUR'])[0]->currency());
+        self::assertSame('RUB', self::map(['merchant_id' => '1', 'state' => '3', 'currency' => ' rur '])[0]->currency());
+        self::assertSame('USD', self::map(['merchant_id' => '1', 'state' => '3', 'currency' => 'usd'])[0]->currency());
+
+        [$cyrillic, $cyrillicWarnings] = self::map(['merchant_id' => '1', 'state' => '3', 'currency' => 'РУБ']);
+        self::assertNull($cyrillic->currency());
+        self::assertCount(1, $cyrillicWarnings);
+        self::assertStringContainsString('currency', $cyrillicWarnings[0]);
     }
 
     public function testTimes(): void

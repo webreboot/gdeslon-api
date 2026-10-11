@@ -37,15 +37,15 @@ final class MerchantTest extends TestCase
     }
 
     #[DataProvider('invalidMerchants')]
-    public function testInvariants(string $name, string $url, ?string $affiliateLink): void
+    public function testInvariants(string $name, string $url, ?string $affiliateLink, ?string $logoUrl = null): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new Merchant(new MerchantId(1), $name, $url, affiliateLink: $affiliateLink);
+        new Merchant(new MerchantId(1), $name, $url, logoUrl: $logoUrl, affiliateLink: $affiliateLink);
     }
 
     /**
-     * @return iterable<string, array{string, string, ?string}>
+     * @return iterable<string, array{0: string, 1: string, 2: ?string, 3?: ?string}>
      */
     public static function invalidMerchants(): iterable
     {
@@ -54,6 +54,8 @@ final class MerchantTest extends TestCase
         yield 'url не http' => ['x', 'ftp://x.ru/', null];
         yield 'url без схемы' => ['x', 'komus.ru', null];
         yield 'ссылка не URL' => ['x', 'https://x.ru/', 'sf.gdeslon.ru/cf/x'];
+        yield 'логотип javascript' => ['x', 'https://x.ru/', null, 'javascript:alert(1)'];
+        yield 'логотип относительный' => ['x', 'https://x.ru/', null, '/logo.png'];
     }
 
     #[DataProvider('domains')]
@@ -107,6 +109,11 @@ final class MerchantTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         new Merchant(new MerchantId(1), 'x', 'https://x.ru/', trafficTypes: [new TrafficType('Cashback', true), new TrafficType('Cashback', false)]);
+    }
+
+    public function testHttpLogoIsKept(): void
+    {
+        self::assertSame('https://www.gdeslon.ru/system/logos/1.png', (new Merchant(new MerchantId(1), 'x', 'https://x.ru/', logoUrl: 'https://www.gdeslon.ru/system/logos/1.png'))->logoUrl());
     }
 
     public function testEmptyOptionalTextsBecomeNull(): void

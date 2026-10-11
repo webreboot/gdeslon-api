@@ -81,12 +81,18 @@ final class NormalizerTest extends TestCase
         self::assertSame(2, $data['next_page']);
         $offers = $data['offers'];
         self::assertIsArray($offers);
-        self::assertCount(8, $offers);
+        self::assertCount(7, $offers);
         self::assertIsArray($offers[0]);
         self::assertSame(['id', 'merchant_id', 'name', 'price', 'old_price', 'charge', 'affiliate_link', 'article', 'category_id', 'available', 'picture',
             'thumbnail', 'original_picture', 'description', 'vendor', 'model', 'product_url', 'ad_marking'], array_keys($offers[0]));
-        self::assertIsArray($offers[0]['price']);
-        self::assertArrayHasKey('amount', $offers[0]['price']);
+        self::assertSame(['amount' => '100', 'currency' => 'RUB'], $offers[0]['price']);
+        self::assertSame(['amount' => '3.64', 'currency' => 'RUB'], $offers[0]['charge']);
+        self::assertIsArray($offers[2]);
+        self::assertNull($offers[2]['charge']);
+        self::assertIsArray($data['skipped']);
+        self::assertCount(1, $data['skipped']);
+        self::assertIsString($data['skipped'][0]);
+        self::assertStringContainsString('цена 0', $data['skipped'][0]);
 
         $empty = CatalogNormalizer::searchResult((new OfferXmlParser())->parse(Fixtures::read('search/search-empty.xml'), new SearchCriteria()));
         self::assertSame([], $empty['offers']);

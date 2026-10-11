@@ -88,24 +88,27 @@ final class SearchCommand extends BaseCommand
 
             return ExitCode::OK;
         }
-        if ($result->isEmpty()) {
+        $next = $result->nextPage();
+        if ($result->isEmpty() && $next === null) {
             $context->nothingFound();
 
             return ExitCode::OK;
         }
 
-        $context->text(Table::render(['Магазин', 'Товар', 'Цена', 'Вознагр.', 'Ссылка'], array_map(static fn (Offer $offer): array => [
-            (string) $offer->merchantId()->value(),
-            $offer->name(),
-            (string) $offer->price(),
-            $offer->charge() === null ? null : (string) $offer->charge(),
-            $offer->affiliateLink(),
-        ], $result->offers()), [1 => 50]));
+        if (!$result->isEmpty()) {
+            $context->text(Table::render(['Магазин', 'Товар', 'Цена', 'Вознагр.', 'Ссылка'], array_map(static fn (Offer $offer): array => [
+                (string) $offer->merchantId()->value(),
+                $offer->name(),
+                (string) $offer->price(),
+                $offer->charge() === null ? null : (string) $offer->charge(),
+                $offer->affiliateLink(),
+            ], $result->offers()), [1 => 50]) . "\n");
+        }
         $context->text(sprintf(
-            "\nСтраница %d · найдено %s · %s\n",
+            "Страница %d · найдено %s · %s\n",
             $criteria->page(),
             $result->total() === null ? '?' : (string) $result->total(),
-            $result->nextPage() === null ? 'последняя страница' : sprintf('следующая: --page=%d', $result->nextPage()->page()),
+            $next === null ? 'последняя страница' : sprintf('следующая: --page=%d', $next->page()),
         ));
 
         return ExitCode::OK;

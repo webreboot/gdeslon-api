@@ -125,6 +125,14 @@ final class McpToolsTest extends TestCase
             'offers' => ['[]' => JsonShapes::OFFER], 'skipped' => ['[]' => 'string'],
         ], $data);
         self::assertSame(3, $data['next_page']);
+        self::assertIsArray($data['offers']);
+        self::assertCount(7, $data['offers']);
+        self::assertIsArray($data['offers'][0]);
+        self::assertSame(['amount' => '100', 'currency' => 'RUB'], $data['offers'][0]['price']);
+        self::assertIsArray($data['offers'][2]);
+        self::assertNull($data['offers'][2]['charge']);
+        self::assertIsArray($data['skipped']);
+        self::assertCount(1, $data['skipped']);
 
         $data = McpTester::structured(self::mcp(200, Fixtures::read('search/search-empty.xml'))->call('search_offers', ['query' => 'x'], self::TOKEN));
         self::assertSame([], $data['offers']);

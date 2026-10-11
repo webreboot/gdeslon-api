@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Catalog;
 
+use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class Merchant
@@ -50,6 +51,9 @@ final class Merchant
         self::assertHttpUrl($url, sprintf('Сайт магазина %s', $id));
         if ($affiliateLink !== null) {
             self::assertHttpUrl($affiliateLink, sprintf('Партнёрская ссылка магазина %s', $id));
+        }
+        if ($logoUrl !== null) {
+            self::assertHttpUrl($logoUrl, sprintf('Логотип магазина %s', $id));
         }
 
         $names = array_map(static fn (TrafficType $type): string => $type->name(), $trafficTypes);
@@ -222,8 +226,8 @@ final class Merchant
 
     private static function assertHttpUrl(string $url, string $what): void
     {
-        if (preg_match('~^https?://[^\s/?#]+~i', $url) !== 1) {
-            throw new InvalidArgumentException(sprintf('%s: ожидался адрес http(s)://, получено «%s»', $what, $url));
+        if (!HttpUrl::isValid($url)) {
+            throw new InvalidArgumentException(sprintf('%s: ожидался адрес http(s)://', $what));
         }
     }
 
