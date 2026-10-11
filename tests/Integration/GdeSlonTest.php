@@ -29,11 +29,13 @@ use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Domain\Shared\SubId;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Cache\CachedDocument;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
+use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Tests\Support\FakeCategoryRepository;
 use Webreboot\GdeSlon\Tests\Support\FakeCouponFeed;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
@@ -331,6 +333,64 @@ final class GdeSlonTest extends TestCase
         self::assertSame($criteria, $catalog->criteria()[0]);
         self::assertSame('x', $catalog->criteria()[1]->query());
         self::assertSame([], $transport->requests());
+    }
+
+    public function testSearchSplitsTimedOutPageByDefault(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
+            ->willReturn(200, Fixtures::read('search/search-l5-p2.xml'));
+
+        $result = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport)->search('платье');
+
+        self::assertCount(3, $transport->requests());
+        self::assertCount(10, $result);
+        self::assertTrue($result->isDegraded());
+        self::assertSame(5, $result->effectiveLimit());
+        self::assertSame(10, $result->criteria()->limit());
+    }
+
+    public function testSearchFallbackLimitFromConfig(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(200, Fixtures::read('search/search-empty.xml'));
+
+        $result = GdeSlon::create(new Config(apiToken: 'secret-token', searchFallbackLimit: 2), $transport)->search('платье');
+
+        self::assertSame([10, 2], array_map(static fn (HttpRequest $r): mixed => $r->query()['l'] ?? null, $transport->requests()));
+        self::assertSame(2, $result->effectiveLimit());
+        self::assertTrue($result->isEmpty());
+    }
+
+    public function testSearchFallbackCanBeDisabled(): void
+    {
+        $transport = (new FakeHttpTransport())->willFail(28, 'Operation timed out');
+        $gdeslon = GdeSlon::create(new Config(apiToken: 'secret-token', searchFallbackLimit: null), $transport);
+
+        try {
+            $gdeslon->search('платье');
+            self::fail('Ожидалось исключение');
+        } catch (TimeoutException $e) {
+            self::assertStringEndsWith('уменьшите limit (сейчас 10)', $e->getMessage());
+        }
+        self::assertCount(1, $transport->requests());
+    }
+
+    public function testCustomProductCatalogIsNotWrapped(): void
+    {
+        $timeout = new TimeoutException('превышено время ожидания', 'GET', 'https://example.com/search', 28);
+        $catalog = new FakeProductCatalog([static fn (): SearchResult => throw $timeout]);
+        $gdeslon = new GdeSlon(new FakeHttpTransport(), null, null, $catalog);
+
+        try {
+            $gdeslon->search('платье');
+            self::fail('Ожидалось исключение');
+        } catch (TimeoutException $e) {
+            self::assertSame($timeout, $e);
+        }
+        self::assertCount(1, $catalog->criteria());
     }
 
     public function testPaginationLoopStopsOnLastPage(): void

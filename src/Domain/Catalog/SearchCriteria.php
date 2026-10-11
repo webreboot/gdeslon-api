@@ -148,6 +148,16 @@ final class SearchCriteria
 
     public function withPage(int $page): self
     {
+        return $this->with($this->limit, $page);
+    }
+
+    public function withLimit(int $limit): self
+    {
+        return $this->with($limit, $this->page);
+    }
+
+    private function with(int $limit, int $page): self
+    {
         return new self(
             $this->query,
             $this->merchants,
@@ -155,7 +165,7 @@ final class SearchCriteria
             $this->categories,
             $this->excludedCategories,
             $this->articles,
-            $this->limit,
+            $limit,
             $page,
             $this->sort,
             $this->parkedDomain,

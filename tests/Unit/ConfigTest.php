@@ -24,6 +24,7 @@ final class ConfigTest extends TestCase
         self::assertNull($config->userAgent());
         self::assertSame(16384, $config->rangeChunkSize());
         self::assertSame(86400, $config->cacheTtl());
+        self::assertSame(5, $config->searchFallbackLimit());
     }
 
     public function testRangeCanBeDisabledAndCacheAlwaysRevalidated(): void
@@ -134,6 +135,7 @@ final class ConfigTest extends TestCase
         self::assertInstanceOf(Config::class, $restored);
         self::assertSame(60.0, $restored->timeout());
         self::assertSame(0, $restored->merchantCacheTtl());
+        self::assertSame(5, $restored->searchFallbackLimit());
 
         try {
             serialize(new Config(apiToken: 'secret-token'));
@@ -216,5 +218,40 @@ final class ConfigTest extends TestCase
 
         $e = self::catchWithTraceArgs(static fn () => new Config(userId: 1, apiKey: 'test-api-key:0123'), InvalidArgumentException::class);
         self::assertTraceHidesSecrets($e, 'test-api-key');
+    }
+
+    public function testSearchFallbackLimit(): void
+    {
+        self::assertNull((new Config(searchFallbackLimit: null))->searchFallbackLimit());
+        self::assertSame(1, (new Config(searchFallbackLimit: 1))->searchFallbackLimit());
+        self::assertSame(100, (new Config(searchFallbackLimit: 100))->searchFallbackLimit());
+    }
+
+    #[DataProvider('invalidSearchFallbackLimits')]
+    public function testRejectsInvalidSearchFallbackLimit(int $limit): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('searchFallbackLimit должен быть от 1 до 100 или null, получено %d', $limit));
+
+        new Config(searchFallbackLimit: $limit);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function invalidSearchFallbackLimits(): iterable
+    {
+        yield 'ноль' => [0];
+        yield 'отрицательный' => [-1];
+        yield 'больше 100' => [101];
+    }
+
+    public function testSearchFallbackLimitIsInDumps(): void
+    {
+        $config = new Config(apiToken: 'secret-token', searchFallbackLimit: 4);
+
+        self::assertSame(4, $config->__debugInfo()['searchFallbackLimit']);
+        self::assertStringContainsString('[searchFallbackLimit] => 4', print_r($config, true));
+        self::assertNull((new Config(searchFallbackLimit: null))->__debugInfo()['searchFallbackLimit']);
     }
 }

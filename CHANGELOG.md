@@ -32,6 +32,11 @@
 - `Offer::key()` — `?OfferKey` (`"<ID магазина>:<артикул>"`, `equals()`, `OfferKey::fromString()`) для склейки офферов,
   повторяющихся на соседних страницах поиска; в JSON оффера — ключ `key` в конце (рецепт — README, «Повторы между
   страницами»).
+- Повтор поиска меньшими страницами: страница, не загрузившаяся за `timeout` (`TimeoutException`), загружается заново
+  частями того же окна — по наибольшему делителю `limit`, не большему `Config::searchFallbackLimit` (по умолчанию 5,
+  `null` — выключить), не больше 20 под-запросов. `SearchResult::isDegraded()` и `effectiveLimit()`; `criteria()` и
+  `nextPage()` — от исходного запроса. `SearchCriteria::withLimit()`. В JSON CLI и MCP поиска — `effective_limit` и
+  `degraded`, в строке статуса CLI — «загружено частями по N» (см. README, «Повтор меньшими страницами»).
 
 ### Безопасность
 
@@ -56,6 +61,11 @@
 
 ### Изменено
 
+- Поиск после таймаута делает до 20 дополнительных запросов и ждёт дольше: до `timeout` × (число под-запросов + 1).
+  Без `query` склеенная страница может содержать повторы — убирайте их по `Offer::key()`. Подсказка в
+  `TimeoutException` поиска — без «увеличьте Config::timeout». Свой `HttpTransport` должен бросать `TimeoutException`
+  при истечении времени, иначе повтора не будет. В MCP `outputSchema` у `search_offers` — новые обязательные поля
+  `effective_limit` и `degraded`.
 - PHP 8.2+: в `getTrace()[*]['args']` исключений пакета вместо запроса, настроек и строк с секретами —
   `SensitiveParameterValue`, а `serialize()` такого исключения (в том числе без секрета, например ошибки `categories()`)
   бросает стандартное `\Exception` PHP. Для логов и очередей берите `getMessage()` или `(string) $e`.

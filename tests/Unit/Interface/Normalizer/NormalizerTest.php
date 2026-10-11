@@ -7,6 +7,7 @@ namespace Webreboot\GdeSlon\Tests\Unit\Interface\Normalizer;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\RateType;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
+use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimState;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderCriteria;
@@ -82,8 +83,10 @@ final class NormalizerTest extends TestCase
 
         $data = CatalogNormalizer::searchResult($result);
 
-        self::assertSame(['query', 'page', 'limit', 'total', 'next_page', 'offers', 'skipped'], array_keys($data));
+        self::assertSame(['query', 'page', 'limit', 'effective_limit', 'degraded', 'total', 'next_page', 'offers', 'skipped'], array_keys($data));
         self::assertSame('платье', $data['query']);
+        self::assertSame(8, $data['effective_limit']);
+        self::assertFalse($data['degraded']);
         self::assertSame(2, $data['next_page']);
         $offers = $data['offers'];
         self::assertIsArray($offers);
@@ -108,6 +111,25 @@ final class NormalizerTest extends TestCase
         $empty = CatalogNormalizer::searchResult((new OfferXmlParser())->parse(Fixtures::read('search/search-empty.xml'), new SearchCriteria()));
         self::assertSame([], $empty['offers']);
         self::assertNull($empty['next_page']);
+    }
+
+    public function testDegradedSearchResult(): void
+    {
+        $criteria = new SearchCriteria(query: 'платье', limit: 10);
+        $parser = new OfferXmlParser();
+        $first = $parser->parse(Fixtures::read('search/search-l5-p1.xml'), $criteria->withLimit(5));
+        $second = $parser->parse(Fixtures::read('search/search-l5-p2.xml'), $criteria->withLimit(5)->withPage(2));
+        $result = new SearchResult($criteria, [...$first->offers(), ...$second->offers()], $first->total(), [], 5);
+
+        $data = CatalogNormalizer::searchResult($result);
+
+        self::assertSame(10, $data['limit']);
+        self::assertSame(5, $data['effective_limit']);
+        self::assertTrue($data['degraded']);
+        self::assertSame(8140, $data['total']);
+        self::assertSame(2, $data['next_page']);
+        self::assertIsArray($data['offers']);
+        self::assertCount(10, $data['offers']);
     }
 
     public function testOrders(): void

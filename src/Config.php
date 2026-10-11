@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon;
 
+use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class Config
@@ -25,6 +26,7 @@ final class Config
         int|string|null $userId = null,
         #[\SensitiveParameter]
         ?string $apiKey = null,
+        private readonly ?int $searchFallbackLimit = 5,
     ) {
         if ($timeout <= 0 || $connectTimeout <= 0) {
             throw new InvalidArgumentException(sprintf(
@@ -41,6 +43,13 @@ final class Config
                 'Время жизни кэша не может быть отрицательным, получено cacheTtl=%d, merchantCacheTtl=%d',
                 $cacheTtl,
                 $merchantCacheTtl,
+            ));
+        }
+        if ($searchFallbackLimit !== null && ($searchFallbackLimit < 1 || $searchFallbackLimit > SearchCriteria::MAX_LIMIT)) {
+            throw new InvalidArgumentException(sprintf(
+                'searchFallbackLimit должен быть от 1 до %d или null, получено %d',
+                SearchCriteria::MAX_LIMIT,
+                $searchFallbackLimit,
             ));
         }
         if ($apiToken !== null && trim($apiToken) === '') {
@@ -110,6 +119,11 @@ final class Config
         return $this->apiKey;
     }
 
+    public function searchFallbackLimit(): ?int
+    {
+        return $this->searchFallbackLimit;
+    }
+
     /**
      * @return list<string>
      */
@@ -137,6 +151,7 @@ final class Config
             'merchantCacheTtl' => $this->merchantCacheTtl,
             'userId' => $this->userId === null ? null : '***',
             'apiKey' => $this->apiKey === null ? null : '***',
+            'searchFallbackLimit' => $this->searchFallbackLimit,
         ];
     }
 }

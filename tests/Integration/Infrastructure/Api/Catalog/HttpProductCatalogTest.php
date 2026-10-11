@@ -16,6 +16,7 @@ use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpProductCatalog;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\SplitOnTimeoutProductCatalog;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
@@ -197,7 +198,7 @@ final class HttpProductCatalogTest extends TestCase
         }
     }
 
-    public function testTimeoutGetsHintToReduceLimit(): void
+    public function testTimeoutPassesThroughUnchanged(): void
     {
         $original = new TimeoutException(
             'GET https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=100&p=1: превышено время ожидания (cURL 28: Operation timed out with 16011 bytes received)',
@@ -211,16 +212,74 @@ final class HttpProductCatalogTest extends TestCase
             self::catalog($transport)->search(new SearchCriteria(limit: 100));
             self::fail('Ожидалось исключение');
         } catch (TimeoutException $e) {
-            self::assertStringContainsString($original->getMessage(), $e->getMessage());
-            self::assertStringContainsString('limit', $e->getMessage());
-            self::assertStringContainsString('100', $e->getMessage());
-            self::assertSame('GET', $e->method());
-            self::assertSame($original->url(), $e->url());
+            self::assertSame($original, $e);
+        }
+        self::assertCount(1, $transport->requests());
+    }
+
+    public function testTimedOutPageIsReloadedInSmallerPages(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out after 30000 milliseconds with 16011 bytes received')
+            ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
+            ->willReturn(200, Fixtures::read('search/search-l5-p2.xml'));
+
+        $result = self::splitting($transport)->search(new SearchCriteria(query: 'платье', limit: 10));
+
+        self::assertSame(
+            [[10, 1], [5, 1], [5, 2]],
+            array_map(static fn (HttpRequest $r): array => [$r->query()['l'] ?? null, $r->query()['p'] ?? null], $transport->requests()),
+        );
+        self::assertSame('платье', $transport->lastRequest()->query()['q']);
+        self::assertCount(10, $result);
+        self::assertSame('4717995399023499000', $result->offers()[0]->id());
+        self::assertSame('15344783908528867000', $result->offers()[5]->id());
+        self::assertSame([], $result->skipped());
+        self::assertSame(8140, $result->total());
+        self::assertSame(5, $result->effectiveLimit());
+        self::assertTrue($result->isDegraded());
+        self::assertSame(10, $result->criteria()->limit());
+        self::assertSame(2, $result->nextPage()?->page());
+    }
+
+    public function testSecondTimeoutDuringSplitHidesToken(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willFail(28, 'Operation timed out');
+
+        try {
+            self::splitting($transport)->search(new SearchCriteria(limit: 10));
+            self::fail('Ожидалось исключение');
+        } catch (TimeoutException $e) {
+            self::assertStringContainsString('повтор страницами по 5 (запрос 1 из 2)', $e->getMessage());
+            self::assertStringContainsString('_gs_at=***&l=5&p=1', $e->url());
             self::assertSame(28, $e->curlErrorCode());
-            self::assertSame($original, $e->getPrevious());
+            $previous = $e->getPrevious();
+            self::assertInstanceOf(TimeoutException::class, $previous);
+            self::assertNoToken($e);
+            self::assertNoToken($previous);
+        }
+        self::assertCount(2, $transport->requests());
+    }
+
+    public function testRateLimitDuringSplitPassesThrough(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
+            ->willReturn(420, 'Rate limit exceeded!', ['Content-Type' => ['text/html; charset=utf-8']]);
+
+        try {
+            self::splitting($transport)->search(new SearchCriteria(query: 'платье', limit: 10));
+            self::fail('Ожидалось исключение');
+        } catch (HttpException $e) {
+            self::assertSame(420, $e->statusCode());
+            self::assertSame('Rate limit exceeded!', $e->responseSnippet());
+            self::assertNull($e->getPrevious());
             self::assertNoToken($e);
         }
-        self::assertCount(1, $transport->requests(), 'запрос не повторяется и limit не меняется');
+        self::assertCount(3, $transport->requests());
     }
 
     public function testOtherTransportErrorsPassThrough(): void
@@ -310,6 +369,11 @@ final class HttpProductCatalogTest extends TestCase
     private static function catalog(FakeHttpTransport $transport): HttpProductCatalog
     {
         return new HttpProductCatalog(new ApiClient($transport), self::TOKEN);
+    }
+
+    private static function splitting(FakeHttpTransport $transport): SplitOnTimeoutProductCatalog
+    {
+        return new SplitOnTimeoutProductCatalog(self::catalog($transport));
     }
 
     private static function assertNoToken(\Throwable $e): void

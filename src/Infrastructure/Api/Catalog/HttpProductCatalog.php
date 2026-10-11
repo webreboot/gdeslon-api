@@ -12,7 +12,6 @@ use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
 use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
-use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 
@@ -70,18 +69,6 @@ final class HttpProductCatalog implements ProductCatalog
             }
 
             throw $e;
-        } catch (TimeoutException $e) {
-            throw new TimeoutException(
-                sprintf(
-                    '%s. Ответ поиска из некоторых сетей обрывается после ~16 КБ: уменьшите limit (сейчас %d) или увеличьте Config::timeout',
-                    rtrim($e->getMessage(), '.'),
-                    $criteria->limit(),
-                ),
-                $e->method(),
-                $e->url(),
-                $e->curlErrorCode(),
-                $e,
-            );
         }
 
         return $this->parser->parse($response->body(), $criteria);

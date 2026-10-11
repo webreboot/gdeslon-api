@@ -63,6 +63,8 @@ final class SearchOffersTool extends ReadTool
             'query' => 'string|null',
             'page' => 'int',
             'limit' => 'int',
+            'effective_limit' => 'int',
+            'degraded' => 'bool',
             'total' => 'int|null',
             'next_page' => 'int|null',
             'offers' => ['[]' => JsonShapes::OFFER],

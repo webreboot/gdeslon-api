@@ -92,6 +92,11 @@ gdeslon [опции] <команда> [подкоманда] [аргументы
 Офферы с ценой 0 в выдачу не попадают: они в `skipped` и в предупреждении stderr. Поэтому на странице может быть
 меньше `--limit` офферов или ни одного — тогда таблицы нет, но строка «Страница N · …» подсказывает `--page` следующей
 страницы (в JSON — `next_page`). «Ничего не найдено.» выводится, только когда следующей страницы нет.
+Страница, не загрузившаяся за таймаут, загружается повторно частями — по наибольшему делителю `--limit`, не большему 5
+(`--limit=10` — по 5, `--limit=12` — по 4, `--limit=7` — по 1). Частей не больше 20, поэтому выбирайте `--limit`,
+кратный 5. Тогда в строке статуса «загружено частями по N», в JSON — `"degraded": true`. Без запроса
+порядок выдачи нестабилен, и в такой странице возможны повторы — склеивайте их по `key`. Подробности — README,
+«Повтор меньшими страницами».
 «—» в колонке «Вознагр.» — API не рассчитало вознаграждение (в ответе `0`).
 
 ### `orders`
@@ -179,7 +184,7 @@ MCP-сервер для AI-агентов: читает JSON-RPC из stdin, о�
 | `merchants` | `{"merchants": […], "skipped": […]}` |
 | `merchants show` | `{"merchant": {…}}` |
 | `merchants categories` | `{"categories": [{id, name}]}` |
-| `search` | `{"query", "page", "limit", "total", "next_page", "offers": […], "skipped"}` |
+| `search` | `{"query", "page", "limit", "effective_limit", "degraded", "total", "next_page", "offers": […], "skipped"}` |
 | `orders` | `{"orders": […], "skipped": […]}` |
 | `lost-orders` | `{"claims": […], "skipped": […]}` |
 | `lost-orders show`, `submit` | `{"claim": {…}}`; `submit --dry-run` — `{"dry_run": true, "claim": {…}}` |
@@ -203,8 +208,10 @@ string, `description` string, `conditions` string, `logo_url` ?string, `country`
 [{`merchant_category_id` int, `name` ?string, `rate_type` `percent|fixed`, `rate` string}], `ad_marking` ?string,
 `erid` ?string (идентификатор рекламы из маркировки, иначе из партнёрской ссылки; `null` — erid нет ни там, ни там).
 
-**Поиск** (корень `search`): `query` ?string, `page` int, `limit` int, `total` ?int, `next_page` ?int (номер
-следующей страницы для `--page`), `offers` [оффер], `skipped` [string].
+**Поиск** (корень `search`): `query` ?string, `page` int, `limit` int, `effective_limit` int (размер запросов, из
+которых собрана страница; равен `limit`, если повтора не было), `degraded` bool (`true` — страница загружена
+частями после таймаута), `total` ?int, `next_page` ?int (номер следующей страницы для `--page`), `offers` [оффер],
+`skipped` [string].
 
 **Оффер** (`offers[]`): `id` string, `merchant_id` int, `name` string, `price` money (больше нуля), `old_price` ?money,
 `charge` ?money (вознаграждение; `null` — API не рассчитало, в ответе `0`), `affiliate_link` string, `article` ?string,

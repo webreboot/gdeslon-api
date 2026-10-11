@@ -35,6 +35,7 @@ use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpCategoryRepository;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpMerchantRepository;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpProductCatalog;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\SplitOnTimeoutProductCatalog;
 use Webreboot\GdeSlon\Infrastructure\Api\Claims\HttpLostOrderClaims;
 use Webreboot\GdeSlon\Infrastructure\Api\Promo\HttpCouponFeed;
 use Webreboot\GdeSlon\Infrastructure\Api\Sales\HttpOrderRepository;
@@ -76,7 +77,7 @@ final class GdeSlon
         $client = new ApiClient($transport);
         $this->categories = $categories ?? new HttpCategoryRepository($client);
         $this->merchants = $merchants ?? new HttpMerchantRepository($client);
-        $this->products = $products ?? new HttpProductCatalog($client);
+        $this->products = $products ?? new SplitOnTimeoutProductCatalog(new HttpProductCatalog($client));
         $this->orders = $orders ?? new HttpOrderRepository($client);
         $this->lostOrders = $lostOrders ?? new HttpLostOrderClaims($client);
         $this->clock = $clock ?? new SystemClock();
@@ -102,7 +103,7 @@ final class GdeSlon
                 $config->apiToken(),
                 $cache === null ? null : new DocumentCache($cache, $clock, $config->merchantCacheTtl()),
             ),
-            new HttpProductCatalog($client, $config->apiToken()),
+            new SplitOnTimeoutProductCatalog(new HttpProductCatalog($client, $config->apiToken()), $config->searchFallbackLimit()),
             new HttpOrderRepository($client, $config->userId(), $config->apiKey(), $clock),
             new HttpLostOrderClaims($client, $config->apiToken(), $clock),
             $clock,

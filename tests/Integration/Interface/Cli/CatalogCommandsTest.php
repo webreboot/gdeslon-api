@@ -10,6 +10,7 @@ use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\MerchantXmlParser;
+use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Tests\Support\CliTester;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
@@ -200,7 +201,27 @@ final class CatalogCommandsTest extends TestCase
         self::assertSame('partner_benefit', $query['order'] ?? null);
         self::assertStringContainsString('Страница 2', $cli->stdout);
         self::assertStringContainsString('--page=3', $cli->stdout);
+        self::assertStringNotContainsString('частями', $cli->stdout);
         self::assertStringNotContainsString('secret-token-0123', $cli->stdout . $cli->stderr);
+    }
+
+    public function testSearchDegraded(): void
+    {
+        $cli = self::degradedCli();
+        self::assertSame(0, $cli->run(['search', 'платье'], self::TOKEN));
+        self::assertCount(3, $cli->transport->requests());
+        self::assertStringContainsString("Страница 1 · найдено 8140 · загружено частями по 5 · следующая: --page=2
+", $cli->stdout);
+        self::assertSame('', $cli->stderr);
+
+        $cli = self::degradedCli();
+        self::assertSame(0, $cli->run(['search', 'платье', '--format=json'], self::TOKEN));
+        $data = self::json($cli->stdout);
+        self::assertSame(10, $data['limit']);
+        self::assertSame(5, $data['effective_limit']);
+        self::assertTrue($data['degraded']);
+        self::assertIsArray($data['offers']);
+        self::assertCount(10, $data['offers']);
     }
 
     public function testSearchJsonAndEmpty(): void
@@ -371,6 +392,31 @@ final class CatalogCommandsTest extends TestCase
     private static function cli(int $status, string $body): CliTester
     {
         return new CliTester((new FakeHttpTransport())->willReturn($status, $body));
+    }
+
+    public function testSearchDegradedPartSizeIsDivisorOfLimit(): void
+    {
+        $xml = Fixtures::read('search/search-l5-p1.xml');
+        $fourOffers = substr($xml, 0, (int) strrpos($xml, '<offer ')) . substr($xml, (int) strpos($xml, '</offers>'));
+        $cli = new CliTester((new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(200, $fourOffers)
+            ->willReturn(200, $fourOffers)
+            ->willReturn(200, $fourOffers));
+
+        self::assertSame(0, $cli->run(['search', 'платье', '--limit=12'], self::TOKEN));
+
+        self::assertSame([12, 4, 4, 4], array_map(static fn (HttpRequest $r): mixed => $r->query()['l'] ?? null, $cli->transport->requests()));
+        self::assertSame([1, 1, 2, 3], array_map(static fn (HttpRequest $r): mixed => $r->query()['p'] ?? null, $cli->transport->requests()));
+        self::assertStringContainsString("Страница 1 · найдено 8140 · загружено частями по 4 · следующая: --page=2\n", $cli->stdout);
+    }
+
+    private static function degradedCli(): CliTester
+    {
+        return new CliTester((new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
+            ->willReturn(200, Fixtures::read('search/search-l5-p2.xml')));
     }
 
     private static function categoriesThenSearch(): CliTester

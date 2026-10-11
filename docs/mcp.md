@@ -95,7 +95,7 @@ claude mcp add --transport stdio gdeslon -- php /path/to/project/vendor/bin/gdes
 | `list_merchants` | `search`, `domain`, `merchant_category_id`, `limit` (20, до 100), `offset` | `{merchants, skipped, total, …}`, короткая форма магазина: `id, name, domain, url, commission_summary, categories, affiliate_link, ad_marking, erid` |
 | `get_merchant` | `merchant_id` | `{merchant}` — полная форма |
 | `list_merchant_categories` | — | `{categories: [{id, name}]}` |
-| `search_offers` | `query`, `merchant_ids`, `exclude_merchant_ids`, `category_ids`, `exclude_category_ids`, `include_subcategories` (`false`), `articles`, `limit` (10, до 100), `page`, `sort` (`price`, `partner_benefit`, `newest`), `parked_domain` | `{query, page, limit, total, next_page, offers, skipped}`. Категория ищется без подкатегорий; с `include_subcategories: true` — вместе с ними (см. ниже) |
+| `search_offers` | `query`, `merchant_ids`, `exclude_merchant_ids`, `category_ids`, `exclude_category_ids`, `include_subcategories` (`false`), `articles`, `limit` (10, до 100), `page`, `sort` (`price`, `partner_benefit`, `newest`), `parked_domain` | `{query, page, limit, effective_limit, degraded, total, next_page, offers, skipped}`. Категория ищется без подкатегорий; с `include_subcategories: true` — вместе с ними (см. ниже) |
 | `list_orders` | `date_field` (`created`, `transition`, `last_updated`, `confirmed`, `accrued`), `until`, `days` (30, до 3660), `merchant_id`, `states` (`new`, `cancelled`, `pending`, `confirmed`, `paid`), `type` (`product`, `lead`), `sub_id`, `limit` (50, до 200), `offset` | `{orders, skipped, total, …}` |
 | `list_lost_order_claims` | `merchant_id`, `from`, `until`, `claim_state` (`in_work`, `closed`), `order_status` (`waiting`, `confirmed`, `declined`), `limit` (50, до 200), `offset` | `{claims, skipped, total, …}` |
 | `get_lost_order_claim` | `claim_id` | `{claim}` |
@@ -115,6 +115,12 @@ claude mcp add --transport stdio gdeslon -- php /path/to/project/vendor/bin/gdes
 партнёрской ссылки; `null` — erid нет ни там, ни там (у оффера erid магазина не подставляется). У оффера — `key`:
 `"<merchant_id>:<article>"` или `null` без артикула. Страницы `search_offers` одного магазина могут повторять офферы —
 склеивайте их по `key`.
+
+Страница `search_offers`, не загрузившаяся за таймаут, загружается повторно частями — по наибольшему делителю `limit`,
+не большему 5 (`limit: 12` — по 4, `limit: 7` — по 1): `degraded: true`, `effective_limit` — размер частей (без
+повтора равен `limit`), `limit`, `page` и `next_page` — как в запросе.
+Частей не больше 20, поэтому выбирайте `limit`, кратный 5. Без `query` порядок выдачи нестабилен — в такой странице
+возможны повторы, склеивайте их по `key`. Частые запросы API отклоняет (`[failed]` с HTTP 420) — сделайте паузу.
 
 Создавать заявки на потерянные заказы через MCP нельзя. Это реальная заявка у рекламодателя, её отправляют командой
 `gdeslon lost-orders submit` в терминале ([docs/cli.md](cli.md)).

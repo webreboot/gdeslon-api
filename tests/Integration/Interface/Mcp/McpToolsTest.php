@@ -173,10 +173,12 @@ final class McpToolsTest extends TestCase
         self::assertSame(2, $query['p'] ?? null);
         self::assertSame('partner_benefit', $query['order'] ?? null);
         self::assertShape([
-            'query' => 'string|null', 'page' => 'int', 'limit' => 'int', 'total' => 'int|null', 'next_page' => 'int|null',
-            'offers' => ['[]' => JsonShapes::OFFER], 'skipped' => ['[]' => 'string'],
+            'query' => 'string|null', 'page' => 'int', 'limit' => 'int', 'effective_limit' => 'int', 'degraded' => 'bool', 'total' => 'int|null',
+            'next_page' => 'int|null', 'offers' => ['[]' => JsonShapes::OFFER], 'skipped' => ['[]' => 'string'],
         ], $data);
         self::assertSame(3, $data['next_page']);
+        self::assertSame(8, $data['effective_limit']);
+        self::assertFalse($data['degraded']);
         self::assertIsArray($data['offers']);
         self::assertCount(7, $data['offers']);
         self::assertIsArray($data['offers'][0]);
@@ -439,6 +441,25 @@ final class McpToolsTest extends TestCase
         $result = McpTester::result($mcp->responses[2]);
         self::assertArrayNotHasKey('structuredContent', $result);
         self::assertStringContainsString('"categories":[', McpTester::text($result));
+    }
+
+    public function testSearchDegraded(): void
+    {
+        $mcp = new McpTester((new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
+            ->willReturn(200, Fixtures::read('search/search-l5-p2.xml')));
+
+        $data = McpTester::structured($mcp->call('search_offers', ['query' => 'платье'], self::TOKEN));
+
+        self::assertCount(3, $mcp->cli->transport->requests());
+        self::assertSame(10, $data['limit']);
+        self::assertSame(5, $data['effective_limit']);
+        self::assertTrue($data['degraded']);
+        self::assertSame(8140, $data['total']);
+        self::assertSame(2, $data['next_page']);
+        self::assertIsArray($data['offers']);
+        self::assertCount(10, $data['offers']);
     }
 
     private static function mcp(int $status, string $body): McpTester

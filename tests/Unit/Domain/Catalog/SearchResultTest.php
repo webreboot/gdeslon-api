@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Tests\Unit\Domain\Catalog;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Domain\Shared\Money;
+use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class SearchResultTest extends TestCase
 {
@@ -92,5 +94,56 @@ final class SearchResultTest extends TestCase
     private static function offer(string $id): Offer
     {
         return new Offer($id, new MerchantId(1), 'Товар ' . $id, new Money('1', 'RUR'), 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1');
+    }
+
+    public function testEffectiveLimitDefaultsToLimit(): void
+    {
+        $result = new SearchResult(new SearchCriteria(limit: 10), self::offers(10), null);
+
+        self::assertSame(10, $result->effectiveLimit());
+        self::assertFalse($result->isDegraded());
+        self::assertFalse((new SearchResult(new SearchCriteria(limit: 10), [], 0, [], 10))->isDegraded());
+    }
+
+    public function testDegradedResultKeepsOriginalCriteriaAndNextPage(): void
+    {
+        $criteria = new SearchCriteria(query: 'платье', limit: 10, page: 2);
+        $result = new SearchResult($criteria, self::offers(10), 8140, [], 5);
+
+        $next = $result->nextPage();
+
+        self::assertSame($criteria, $result->criteria());
+        self::assertSame(5, $result->effectiveLimit());
+        self::assertTrue($result->isDegraded());
+        self::assertNotNull($next);
+        self::assertSame(3, $next->page());
+        self::assertSame(10, $next->limit());
+        self::assertSame('платье', $next->query());
+    }
+
+    public function testDegradedShortPageIsLast(): void
+    {
+        self::assertFalse((new SearchResult(new SearchCriteria(limit: 10), self::offers(7), null, [], 5))->hasNextPage());
+        self::assertTrue((new SearchResult(new SearchCriteria(limit: 10), self::offers(9), null, ['оффер «1»: нет поля url'], 5))->hasNextPage());
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function invalidEffectiveLimits(): iterable
+    {
+        yield 'ноль' => [0];
+        yield 'отрицательный' => [-5];
+        yield 'больше limit' => [20];
+        yield 'не делитель limit' => [3];
+    }
+
+    #[DataProvider('invalidEffectiveLimits')]
+    public function testRejectsInvalidEffectiveLimit(int $effectiveLimit): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('limit 10, получено %d', $effectiveLimit));
+
+        new SearchResult(new SearchCriteria(limit: 10), [], null, [], $effectiveLimit);
     }
 }

@@ -159,6 +159,8 @@ final class CatalogNormalizer
             'query' => $criteria->query(),
             'page' => $criteria->page(),
             'limit' => $criteria->limit(),
+            'effective_limit' => $result->effectiveLimit(),
+            'degraded' => $result->isDegraded(),
             'total' => $result->total(),
             'next_page' => $result->nextPage()?->page(),
             'offers' => array_map(self::offer(...), $result->offers()),

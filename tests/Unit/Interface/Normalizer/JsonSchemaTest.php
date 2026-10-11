@@ -51,13 +51,15 @@ final class JsonSchemaTest extends TestCase
 
     public function testSearch(): void
     {
-        foreach (['search/search.xml', 'search/search-edge.xml'] as $fixture) {
+        foreach (['search/search.xml', 'search/search-edge.xml', 'search/search-l5-p1.xml'] as $fixture) {
             $result = (new OfferXmlParser())->parse(Fixtures::read($fixture), new SearchCriteria(query: 'платье', limit: 8));
 
             self::assertShape([
                 'query' => 'string|null',
                 'page' => 'int',
                 'limit' => 'int',
+                'effective_limit' => 'int',
+                'degraded' => 'bool',
                 'total' => 'int|null',
                 'next_page' => 'int|null',
                 'offers' => ['[]' => JsonShapes::OFFER],

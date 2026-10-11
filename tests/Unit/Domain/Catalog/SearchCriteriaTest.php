@@ -127,4 +127,51 @@ final class SearchCriteriaTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         (new SearchCriteria(limit: 10))->withPage(1001);
     }
+
+    public function testWithLimitKeepsOtherCriteria(): void
+    {
+        $criteria = new SearchCriteria(
+            query: 'платье',
+            merchants: [107054],
+            excludedMerchants: [82012],
+            categories: [26],
+            excludedCategories: [27],
+            articles: ['A-1'],
+            limit: 10,
+            page: 3,
+            sort: OfferSort::Price,
+            parkedDomain: 'https://my.site.ru',
+        );
+
+        $smaller = $criteria->withLimit(5);
+
+        self::assertNotSame($criteria, $smaller);
+        self::assertSame(10, $criteria->limit());
+        self::assertSame(5, $smaller->limit());
+        self::assertSame(3, $smaller->page());
+        self::assertSame('платье', $smaller->query());
+        self::assertSame($criteria->merchants(), $smaller->merchants());
+        self::assertSame($criteria->excludedMerchants(), $smaller->excludedMerchants());
+        self::assertSame($criteria->categories(), $smaller->categories());
+        self::assertSame($criteria->excludedCategories(), $smaller->excludedCategories());
+        self::assertSame(['A-1'], $smaller->articles());
+        self::assertSame(OfferSort::Price, $smaller->sort());
+        self::assertSame('https://my.site.ru', $smaller->parkedDomain());
+    }
+
+    public function testWithLimitValidates(): void
+    {
+        self::assertSame(2000, (new SearchCriteria(limit: 10, page: 1000))->withLimit(5)->withPage(2000)->page());
+
+        try {
+            (new SearchCriteria(limit: 10, page: 1000))->withLimit(20);
+            self::fail('окно page × limit');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('1000 × 20', $e->getMessage());
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('limit должен быть от 1 до 100, получено 0');
+        (new SearchCriteria())->withLimit(0);
+    }
 }

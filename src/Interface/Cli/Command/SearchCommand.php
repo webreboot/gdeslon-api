@@ -121,9 +121,10 @@ final class SearchCommand extends BaseCommand
             ], $result->offers()), [1 => 50]) . "\n");
         }
         $context->text(sprintf(
-            "Страница %d · найдено %s · %s\n",
+            "Страница %d · найдено %s · %s%s\n",
             $criteria->page(),
             $result->total() === null ? '?' : (string) $result->total(),
+            $result->isDegraded() ? sprintf('загружено частями по %d · ', $result->effectiveLimit()) : '',
             $next === null ? 'последняя страница' : sprintf('следующая: --page=%d', $next->page()),
         ));
 
