@@ -11,5 +11,5 @@ interface CategoryRepository
     /**
      * @throws GdeSlonException
      */
-    public function all(): CategoryTree;
+    public function all(bool $refresh = false): CategoryTree;
 }

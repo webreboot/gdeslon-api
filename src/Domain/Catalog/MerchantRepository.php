@@ -11,5 +11,5 @@ interface MerchantRepository
     /**
      * @throws GdeSlonException
      */
-    public function all(bool $public = false): MerchantList;
+    public function all(bool $public = false, bool $refresh = false): MerchantList;
 }

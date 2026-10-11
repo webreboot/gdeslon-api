@@ -35,19 +35,21 @@ final class HttpMerchantRepository implements MerchantRepository
         $this->loader = new ConditionalLoader($client, $cache);
     }
 
-    public function all(bool $public = false): MerchantList
+    public function all(bool $public = false, bool $refresh = false): MerchantList
     {
         $token = $public ? null : ($this->token ?? throw new InvalidArgumentException(
             'Магазины вебмастера требуют токен XML API: new Config(apiToken: …); публичный каталог без партнёрских ссылок — merchants(public: true)',
         ));
         $request = HttpRequest::get($this->url, $token === null ? [] : ['api_token' => $token]);
-
-        return $this->loader->load(
+        $loaded = $this->loader->load(
             $request,
             $this->url . '#' . hash('sha256', $token ?? ''),
             fn (#[\SensitiveParameter] HttpResponse $response): MerchantList => $this->toList($request, $response, $public),
             static fn (MerchantList $list): bool => $list->skipped() === [],
+            $refresh,
         );
+
+        return $loaded->value->withOrigin($loaded->origin);
     }
 
     /**

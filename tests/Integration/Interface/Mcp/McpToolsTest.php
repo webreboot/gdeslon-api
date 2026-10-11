@@ -6,11 +6,15 @@ namespace Webreboot\GdeSlon\Tests\Integration\Interface\Mcp;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\GdeSlon;
+use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\CategoryMapper;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpProductCatalog;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\MerchantXmlParser;
 use Webreboot\GdeSlon\Interface\Normalizer\JsonShapes;
+use Webreboot\GdeSlon\Tests\Support\FakeCategoryRepository;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
@@ -460,6 +464,48 @@ final class McpToolsTest extends TestCase
         self::assertSame(2, $data['next_page']);
         self::assertIsArray($data['offers']);
         self::assertCount(10, $data['offers']);
+    }
+
+    /**
+     * @param array<string, mixed>  $arguments
+     * @param array<string, string> $env
+     */
+    #[DataProvider('staleCatalogTools')]
+    public function testStaleCategoriesAreLoggedAndResultUnchanged(string $tool, array $arguments, array $env): void
+    {
+        $current = self::catalogMcp(DataOrigin::Revalidated);
+        $expected = $current->call($tool, $arguments, $env);
+        self::assertStringNotContainsString('сохранённой копии', $current->cli->stderr);
+
+        $stale = self::catalogMcp(DataOrigin::Stale);
+        $result = $stale->call($tool, $arguments, $env);
+
+        self::assertSame($expected, $result);
+        self::assertNotSame([], McpTester::structured($result));
+        self::assertMatchesRegularExpression('/^gdeslon mcp: .*сохранённой копии/mu', $stale->cli->stderr);
+        self::assertSame(1, substr_count($stale->cli->stderr, 'сохранённой копии'));
+    }
+
+    /**
+     * @return iterable<string, array{string, array<string, mixed>, array<string, string>}>
+     */
+    public static function staleCatalogTools(): iterable
+    {
+        yield 'get_categories' => ['get_categories', [], []];
+        yield 'search_offers с подкатегориями' => ['search_offers', ['query' => 'тренч', 'category_ids' => [1113], 'include_subcategories' => true], self::TOKEN];
+        yield 'list_merchants' => ['list_merchants', [], self::TOKEN];
+        yield 'get_merchant' => ['get_merchant', ['merchant_id' => 105263], self::TOKEN];
+        yield 'list_merchant_categories' => ['list_merchant_categories', [], []];
+    }
+
+    private static function catalogMcp(DataOrigin $origin): McpTester
+    {
+        $categories = new FakeCategoryRepository((new CategoryMapper())->toTree(Fixtures::json('categories/categories.json'))->withOrigin($origin));
+        $merchants = new FakeMerchantRepository((new MerchantXmlParser())->parse(Fixtures::read('merchants/shops.xml'))->withOrigin($origin));
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('search/search.xml'));
+        $products = new HttpProductCatalog(new ApiClient($transport), 'secret-token-0123');
+
+        return new McpTester(build: static fn (): GdeSlon => new GdeSlon($transport, $categories, $merchants, $products));
     }
 
     private static function mcp(int $status, string $body): McpTester

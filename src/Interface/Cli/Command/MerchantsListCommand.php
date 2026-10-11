@@ -39,6 +39,7 @@ final class MerchantsListCommand extends BaseCommand
             Option::value('search', 'подстрока в названии или домене', 'TEXT'),
             Option::value('domain', 'сайт магазина: хост или URL', 'HOST'),
             Option::value('category', 'ID категории магазинов (gdeslon merchants categories)', 'ID'),
+            Option::flag('refresh', 'загрузить заново, даже если копия в кэше свежая; при сбое — ошибка'),
         ];
     }
 
@@ -52,7 +53,7 @@ final class MerchantsListCommand extends BaseCommand
         self::noArguments($arguments);
         $category = self::intOption($input, 'category');
 
-        $list = $context->merchants();
+        $list = $context->merchants($input->flag('refresh'));
         $merchants = $list->all();
         if ($input->value('search') !== null) {
             $merchants = self::intersect($merchants, $list->search($input->value('search')));

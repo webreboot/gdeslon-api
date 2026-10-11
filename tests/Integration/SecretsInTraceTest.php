@@ -141,6 +141,38 @@ final class SecretsInTraceTest extends TestCase
     }
 
     /**
+     * @param \Closure(FakeHttpTransport): FakeHttpTransport $response
+     * @param class-string<\Throwable>                       $expected
+     */
+    #[DataProvider('merchantRefreshFailures')]
+    public function testMerchantsRefreshFailureHidesTokenInTrace(\Closure $response, string $expected): void
+    {
+        self::requireSensitiveParameter();
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops.xml'), ['ETag' => ['W/"e"']]);
+        $gdeslon = GdeSlon::create(new Config(apiToken: self::TOKEN), $response($transport), new InMemoryCacheStore(), FrozenClock::at('2026-10-07 12:00:00'));
+        $gdeslon->merchants();
+
+        $e = self::catchWithTraceArgs(static fn () => $gdeslon->merchants(refresh: true), $expected);
+
+        self::assertTraceHidesSecrets($e, self::TOKEN);
+        self::assertSame('W/"e"', $transport->lastRequest()->header('If-None-Match'));
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(FakeHttpTransport): FakeHttpTransport, class-string<\Throwable>}>
+     */
+    public static function merchantRefreshFailures(): iterable
+    {
+        yield '401' => [static fn (FakeHttpTransport $t) => $t->willReturn(401, ''), AuthenticationException::class];
+        yield 'токен не принят: нет партнёрских ссылок' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(200, Fixtures::read('merchants/shops-public.xml')),
+            AuthenticationException::class,
+        ];
+        yield 'битый XML' => [static fn (FakeHttpTransport $t) => $t->willReturn(200, '<shops><shop>'), UnexpectedResponseException::class];
+        yield 'таймаут' => [static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out'), TimeoutException::class];
+    }
+
+    /**
      * @return iterable<string, array{\Closure(FakeHttpTransport): FakeHttpTransport, class-string<\Throwable>}>
      */
     public static function couponFailures(): iterable

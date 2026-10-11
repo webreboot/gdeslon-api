@@ -13,14 +13,17 @@ final class FakeMerchantRepository implements MerchantRepository
 
     private ?bool $lastPublic = null;
 
+    private ?bool $lastRefresh = null;
+
     public function __construct(private readonly MerchantList $list)
     {
     }
 
-    public function all(bool $public = false): MerchantList
+    public function all(bool $public = false, bool $refresh = false): MerchantList
     {
         $this->calls++;
         $this->lastPublic = $public;
+        $this->lastRefresh = $refresh;
 
         return $this->list;
     }
@@ -33,5 +36,10 @@ final class FakeMerchantRepository implements MerchantRepository
     public function lastPublic(): ?bool
     {
         return $this->lastPublic;
+    }
+
+    public function lastRefresh(): ?bool
+    {
+        return $this->lastRefresh;
     }
 }

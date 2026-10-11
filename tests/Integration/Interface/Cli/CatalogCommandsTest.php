@@ -6,12 +6,18 @@ namespace Webreboot\GdeSlon\Tests\Integration\Interface\Cli;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\GdeSlon;
+use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\CategoryMapper;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpProductCatalog;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\MerchantXmlParser;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Tests\Support\CliTester;
+use Webreboot\GdeSlon\Tests\Support\FakeCategoryRepository;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
@@ -387,6 +393,157 @@ final class CatalogCommandsTest extends TestCase
         self::assertStringContainsString('найдено 82', $cli->stdout);
         self::assertStringNotContainsString('Ничего не найдено.', $cli->stderr);
         self::assertStringContainsString('Пропущено записей: 2', $cli->stderr);
+    }
+
+    public function testCategoriesRefreshFlagReachesFacade(): void
+    {
+        $repository = new FakeCategoryRepository(self::categoryTree());
+        $cli = new CliTester(build: static fn (): GdeSlon => new GdeSlon(new FakeHttpTransport(), $repository));
+
+        self::assertSame(0, $cli->run(['categories', '--refresh']), $cli->stderr);
+        self::assertTrue($repository->lastRefresh());
+        self::assertSame(0, $cli->run(['categories', '1']), $cli->stderr);
+        self::assertFalse($repository->lastRefresh());
+
+        $help = new CliTester();
+        self::assertSame(0, $help->run(['categories', '--help']));
+        self::assertStringContainsString('--refresh', $help->stdout);
+    }
+
+    /**
+     * @param list<string>          $argv
+     * @param array<string, string> $env
+     */
+    #[DataProvider('merchantRefreshCommands')]
+    public function testMerchantsListRefreshFlagReachesFacade(array $argv, array $env, bool $public, bool $refresh): void
+    {
+        $repository = new FakeMerchantRepository((new MerchantXmlParser())->parse(Fixtures::read('merchants/shops.xml')));
+        $cli = new CliTester(build: static fn (): GdeSlon => new GdeSlon(new FakeHttpTransport(), null, $repository));
+
+        self::assertSame(0, $cli->run($argv, $env), $cli->stderr);
+        self::assertSame($public, $repository->lastPublic());
+        self::assertSame($refresh, $repository->lastRefresh());
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, array<string, string>, bool, bool}>
+     */
+    public static function merchantRefreshCommands(): iterable
+    {
+        yield 'merchants --refresh с токеном' => [['merchants', '--refresh'], self::TOKEN, false, true];
+        yield 'merchants list --refresh без токена' => [['merchants', 'list', '--refresh'], [], true, true];
+        yield 'merchants list без --refresh' => [['merchants', 'list'], self::TOKEN, false, false];
+        yield 'merchants show' => [['merchants', 'show', '105263'], self::TOKEN, false, false];
+        yield 'merchants categories' => [['merchants', 'categories'], self::TOKEN, false, false];
+    }
+
+    /**
+     * @param list<string>          $argv
+     * @param array<string, string> $env
+     */
+    #[DataProvider('staleCatalogCommands')]
+    public function testStaleCatalogWarnsInStderrAndKeepsStdout(array $argv, array $env): void
+    {
+        $current = self::catalogCli(DataOrigin::Revalidated);
+        self::assertSame(0, $current->run($argv, $env), $current->stderr);
+        self::assertStringNotContainsString('сохранённой копии', $current->stderr);
+
+        $stale = self::catalogCli(DataOrigin::Stale);
+        self::assertSame(0, $stale->run($argv, $env), $stale->stderr);
+        self::assertStringContainsString('сохранённой копии', $stale->stderr);
+        self::assertSame($current->stdout, $stale->stdout);
+        self::assertNotSame('', $stale->stdout);
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, array<string, string>}>
+     */
+    public static function staleCatalogCommands(): iterable
+    {
+        yield 'categories' => [['categories'], []];
+        yield 'categories --format=json' => [['categories', '1', '--format=json'], []];
+        yield 'merchants' => [['merchants'], self::TOKEN];
+        yield 'merchants --format=json' => [['merchants', '--format=json'], self::TOKEN];
+        yield 'merchants show' => [['merchants', 'show', '105263'], self::TOKEN];
+        yield 'merchants categories' => [['merchants', 'categories'], []];
+        yield 'search --subcategories' => [['search', 'тренч', '--category=1113', '--subcategories'], self::TOKEN];
+    }
+
+    public function testRefreshFailureExitsWithErrorAndKeepsCopy(): void
+    {
+        $dir = sys_get_temp_dir() . '/gdeslon-cli-refresh-' . bin2hex(random_bytes(4));
+        $cli = new CliTester((new FakeHttpTransport())
+            ->willReturn(200, Fixtures::read('categories/categories.json'), ['ETag' => ['"e"']])
+            ->willReturn(200, Fixtures::read('merchants/shops.xml'), ['ETag' => ['W/"e"']])
+            ->willFail(28, 'Operation timed out')
+            ->willReturn(401, '')
+            ->willReturn(200, Fixtures::read('merchants/shops-public.xml')));
+        try {
+            self::assertSame(0, $cli->run(['categories', '--cache-dir=' . $dir]), $cli->stderr);
+            self::assertSame(0, $cli->run(['merchants', '--cache-dir=' . $dir], self::TOKEN), $cli->stderr);
+            $before = self::files($dir);
+            self::assertCount(2, $before);
+
+            self::assertSame(1, $cli->run(['categories', '--refresh', '--cache-dir=' . $dir]));
+            self::assertStringStartsWith('Ошибка: ', $cli->stderr);
+            self::assertSame('', $cli->stdout);
+            self::assertSame('"e"', $cli->transport->lastRequest()->header('If-None-Match'));
+
+            self::assertSame(3, $cli->run(['merchants', '--refresh', '--cache-dir=' . $dir], self::TOKEN));
+            self::assertSame(3, $cli->run(['merchants', 'list', '--refresh', '--cache-dir=' . $dir], self::TOKEN));
+            self::assertStringNotContainsString('secret-token-0123', $cli->stderr);
+            self::assertSame($before, self::files($dir));
+
+            self::assertSame(0, $cli->run(['categories', '--cache-dir=' . $dir]), 'обычный вызов — из копии');
+            self::assertCount(5, $cli->transport->requests());
+        } finally {
+            foreach (glob($dir . '/{,.}*', GLOB_BRACE) ?: [] as $file) {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+            if (is_dir($dir)) {
+                rmdir($dir);
+            }
+        }
+    }
+
+    public function testRefreshIsUnknownForOtherCommands(): void
+    {
+        foreach ([['merchants', 'show', '105263', '--refresh'], ['merchants', 'categories', '--refresh'], ['search', 'x', '--refresh'], ['coupons', '--refresh'], ['--refresh', 'orders']] as $argv) {
+            $cli = new CliTester();
+            self::assertSame(2, $cli->run($argv, self::TOKEN), implode(' ', $argv));
+            self::assertStringContainsString('--refresh', $cli->stderr, implode(' ', $argv));
+            self::assertSame(0, $cli->factoryCalls, implode(' ', $argv));
+        }
+    }
+
+    private static function catalogCli(DataOrigin $origin): CliTester
+    {
+        $categories = new FakeCategoryRepository(self::categoryTree()->withOrigin($origin));
+        $merchants = new FakeMerchantRepository((new MerchantXmlParser())->parse(Fixtures::read('merchants/shops.xml'))->withOrigin($origin));
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('search/search.xml'));
+        $products = new HttpProductCatalog(new ApiClient($transport), 'secret-token-0123');
+
+        return new CliTester(build: static fn (): GdeSlon => new GdeSlon($transport, $categories, $merchants, $products));
+    }
+
+    private static function categoryTree(): CategoryTree
+    {
+        return (new CategoryMapper())->toTree(Fixtures::json('categories/categories.json'));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function files(string $dir): array
+    {
+        $files = [];
+        foreach (glob($dir . '/*') ?: [] as $file) {
+            $files[basename($file)] = (string) file_get_contents($file);
+        }
+
+        return $files;
     }
 
     private static function cli(int $status, string $body): CliTester

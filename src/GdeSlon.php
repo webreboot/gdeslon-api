@@ -114,9 +114,9 @@ final class GdeSlon
     /**
      * @throws GdeSlonException
      */
-    public function categories(): CategoryTree
+    public function categories(bool $refresh = false): CategoryTree
     {
-        return $this->categories->all();
+        return $this->categories->all(refresh: $refresh);
     }
 
     /**
@@ -130,9 +130,9 @@ final class GdeSlon
     /**
      * @throws GdeSlonException
      */
-    public function merchants(bool $public = false): MerchantList
+    public function merchants(bool $public = false, bool $refresh = false): MerchantList
     {
-        return $this->merchants->all(public: $public);
+        return $this->merchants->all(public: $public, refresh: $refresh);
     }
 
     /**

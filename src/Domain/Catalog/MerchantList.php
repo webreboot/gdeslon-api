@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Catalog;
 
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 /**
@@ -13,6 +14,8 @@ final class MerchantList implements \IteratorAggregate, \Countable
 {
     /** @var array<int, Merchant> */
     private array $byId = [];
+
+    private DataOrigin $origin = DataOrigin::Fetched;
 
     /**
      * @param iterable<Merchant> $merchants
@@ -130,6 +133,19 @@ final class MerchantList implements \IteratorAggregate, \Countable
     public function skipped(): array
     {
         return $this->skipped;
+    }
+
+    public function origin(): DataOrigin
+    {
+        return $this->origin;
+    }
+
+    public function withOrigin(DataOrigin $origin): self
+    {
+        $copy = clone $this;
+        $copy->origin = $origin;
+
+        return $copy;
     }
 
     public function count(): int

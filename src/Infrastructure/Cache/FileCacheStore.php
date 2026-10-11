@@ -12,6 +12,11 @@ final class FileCacheStore implements CacheStore
     {
     }
 
+    public function directory(): string
+    {
+        return $this->directory;
+    }
+
     public function get(string $key): ?string
     {
         $path = $this->path($key);

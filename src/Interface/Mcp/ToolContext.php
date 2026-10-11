@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Interface\Mcp;
 
+use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Interface\Cli\Console;
 use Webreboot\GdeSlon\Interface\Cli\Environment;
@@ -35,9 +37,20 @@ final class ToolContext
         return $this->gdeslon ??= ($this->factory)();
     }
 
+    public function categories(): CategoryTree
+    {
+        $tree = $this->gdeslon()->categories();
+        $this->warnStale($tree->origin(), 'категории');
+
+        return $tree;
+    }
+
     public function merchants(): MerchantList
     {
-        return $this->gdeslon()->merchants(public: $this->environment->token() === null);
+        $list = $this->gdeslon()->merchants(public: $this->environment->token() === null);
+        $this->warnStale($list->origin(), 'магазины');
+
+        return $list;
     }
 
     public function log(string $message): void
@@ -45,6 +58,13 @@ final class ToolContext
         try {
             $this->console->err('gdeslon mcp: ' . $message . "\n");
         } catch (\Webreboot\GdeSlon\Interface\Cli\OutputFailedException) {
+        }
+    }
+
+    private function warnStale(DataOrigin $origin, string $what): void
+    {
+        if (!$origin->isCurrent()) {
+            $this->log(sprintf('API недоступен, %s — из сохранённой копии и могут быть устаревшими', $what));
         }
     }
 }

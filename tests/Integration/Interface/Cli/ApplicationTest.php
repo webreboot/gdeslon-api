@@ -79,10 +79,12 @@ final class ApplicationTest extends TestCase
         $cli = self::withCategories();
         self::assertSame(0, $cli->run(['categories', '--cache-dir=' . $dir]));
         self::assertInstanceOf(FileCacheStore::class, $cli->cache);
+        self::assertSame($dir, $cli->cache->directory());
 
         $cli = self::withCategories();
         self::assertSame(0, $cli->run(['categories'], ['HOME' => $dir]));
-        self::assertInstanceOf(FileCacheStore::class, $cli->cache, 'кэш по умолчанию в каталоге пользователя');
+        self::assertInstanceOf(FileCacheStore::class, $cli->cache);
+        self::assertSame($dir . '/.cache/gdeslon-api', $cli->cache->directory(), 'кэш по умолчанию в каталоге пользователя');
 
         $cli = self::withCategories();
         self::assertSame(0, $cli->run(['categories'], ['GDESLON_USER_ID' => '1234']), 'неполная пара ключей не мешает другим командам');
@@ -134,7 +136,7 @@ final class ApplicationTest extends TestCase
     public function testInternalErrorAndSecretMasking(): void
     {
         $failing = new class () implements CategoryRepository {
-            public function all(): CategoryTree
+            public function all(bool $refresh = false): CategoryTree
             {
                 throw new \RuntimeException('boom secret-token-0123');
             }

@@ -10,6 +10,7 @@ use Webreboot\GdeSlon\Domain\Catalog\Category;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryId;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryNotFoundException;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
@@ -290,6 +291,42 @@ final class CategoryTreeTest extends TestCase
         self::assertCount(10, $tree);
         self::assertSame($tree->all(), iterator_to_array($tree, false));
         self::assertSame([1113, 1216, 1217, 1230, 1231, 1232, 263, 1052, 1054, 1992], self::idsOf($tree->all()));
+    }
+
+    public function testOriginDefaultsToFetched(): void
+    {
+        self::assertSame(DataOrigin::Fetched, self::tree()->origin());
+        self::assertSame(DataOrigin::Fetched, (new CategoryTree([]))->origin());
+    }
+
+    public function testWithOriginReturnsCopyAndKeepsOriginal(): void
+    {
+        $tree = self::tree();
+
+        $stale = $tree->withOrigin(DataOrigin::Stale);
+
+        self::assertNotSame($tree, $stale);
+        self::assertSame(DataOrigin::Stale, $stale->origin());
+        self::assertSame(DataOrigin::Fetched, $tree->origin());
+        self::assertSame($tree->all(), $stale->all());
+        self::assertSame(DataOrigin::Cached, $stale->withOrigin(DataOrigin::Cached)->origin());
+        self::assertSame(DataOrigin::Stale, $stale->origin());
+    }
+
+    public function testWithOriginKeepsIndexes(): void
+    {
+        $tree = self::tree();
+
+        $copy = $tree->withOrigin(DataOrigin::Revalidated);
+
+        self::assertCount(10, $copy);
+        self::assertSame($tree->get(1231), $copy->get(1231));
+        self::assertSame($tree->roots(), $copy->roots());
+        self::assertSame($tree->orphans(), $copy->orphans());
+        self::assertSame(self::idsOf($tree->childrenOf(1230)), self::idsOf($copy->childrenOf(1230)));
+        self::assertSame(self::idsOf($tree->descendantsOf(1113)), self::idsOf($copy->descendantsOf(1113)));
+        self::assertSame(self::idsOf($tree->breadcrumbs(1231)), self::idsOf($copy->breadcrumbs(1231)));
+        self::assertSame($tree->all(), iterator_to_array($copy, false));
     }
 
     private static function tree(): CategoryTree

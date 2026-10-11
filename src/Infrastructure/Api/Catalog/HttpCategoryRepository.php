@@ -30,14 +30,16 @@ final class HttpCategoryRepository implements CategoryRepository
         $this->loader = new ConditionalLoader($client, $cache);
     }
 
-    public function all(): CategoryTree
+    public function all(bool $refresh = false): CategoryTree
     {
         $request = HttpRequest::get($this->url);
-
-        return $this->loader->load(
+        $loaded = $this->loader->load(
             $request,
             $this->url,
             fn (#[\SensitiveParameter] HttpResponse $response): CategoryTree => $this->mapper->toTree($this->client->decodeJson($request, $response)),
+            refresh: $refresh,
         );
+
+        return $loaded->value->withOrigin($loaded->origin);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Catalog;
 
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 /**
@@ -19,6 +20,8 @@ final class CategoryTree implements \IteratorAggregate, \Countable
 
     /** @var array<int, list<Category>> */
     private array $descendantsByAncestor = [];
+
+    private DataOrigin $origin = DataOrigin::Fetched;
 
     /**
      * @param iterable<Category> $categories
@@ -119,6 +122,19 @@ final class CategoryTree implements \IteratorAggregate, \Countable
             $this->byId,
             fn (Category $category): bool => $category->parentId() !== null && !$this->has($category->parentId()),
         ));
+    }
+
+    public function origin(): DataOrigin
+    {
+        return $this->origin;
+    }
+
+    public function withOrigin(DataOrigin $origin): self
+    {
+        $copy = clone $this;
+        $copy->origin = $origin;
+
+        return $copy;
     }
 
     public function count(): int

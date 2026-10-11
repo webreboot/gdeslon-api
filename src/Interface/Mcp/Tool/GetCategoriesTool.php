@@ -68,7 +68,7 @@ final class GetCategoriesTool extends ReadTool
         }
         $arguments->done();
 
-        $tree = $context->gdeslon()->categories();
+        $tree = $context->categories();
         $breadcrumbs = [];
         if ($name !== null) {
             $pattern = '/' . preg_quote($name, '/') . '/iu';

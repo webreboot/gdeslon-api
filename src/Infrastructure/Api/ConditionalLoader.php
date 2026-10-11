@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Infrastructure\Api;
 
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\TransportException;
@@ -28,27 +29,24 @@ final class ConditionalLoader
      * @param callable(HttpResponse): T $parse
      * @param (callable(T): bool)|null  $cacheable
      *
-     * @return T
+     * @return LoadedDocument<T>
      */
-    public function load(#[\SensitiveParameter] HttpRequest $request, string $cacheId, callable $parse, ?callable $cacheable = null): mixed
+    public function load(#[\SensitiveParameter] HttpRequest $request, string $cacheId, callable $parse, ?callable $cacheable = null, bool $refresh = false): LoadedDocument
     {
         $cache = $this->cache;
         $hit = $cache === null ? null : $this->cached($cache, $cacheId, $parse);
-        if ($cache !== null && $hit !== null && $cache->isFresh($hit->document)) {
-            return $hit->value;
+        if (!$refresh && $cache !== null && $hit !== null && $cache->isFresh($hit->document)) {
+            return new LoadedDocument($hit->value, DataOrigin::Cached);
         }
+        $fallback = $refresh ? null : $hit;
 
         $conditional = $hit === null ? $request : $request->withHeaders($request->headers() + self::conditionalHeaders($hit->document));
         try {
             $response = $this->client->fetch($conditional);
         } catch (TransportException $e) {
-            return $hit !== null ? $hit->value : throw $e;
+            return self::staleOrThrow($fallback, $e);
         } catch (HttpException $e) {
-            if ($hit !== null && $e->statusCode() >= 500) {
-                return $hit->value;
-            }
-
-            throw $e;
+            return $e->statusCode() >= 500 ? self::staleOrThrow($fallback, $e) : throw $e;
         }
 
         if ($response->statusCode() === 304) {
@@ -61,19 +59,19 @@ final class ConditionalLoader
             }
             $cache->touch($cacheId, $hit->document);
 
-            return $hit->value;
+            return new LoadedDocument($hit->value, DataOrigin::Revalidated);
         }
 
         try {
             $result = $parse($response);
         } catch (UnexpectedResponseException $e) {
-            return $hit !== null ? $hit->value : throw $e;
+            return self::staleOrThrow($fallback, $e);
         }
         if ($cacheable === null || $cacheable($result)) {
             $cache?->save($cacheId, $response);
         }
 
-        return $result;
+        return new LoadedDocument($result, DataOrigin::Fetched);
     }
 
     /**
@@ -95,6 +93,18 @@ final class ConditionalLoader
         } catch (UnexpectedResponseException) {
             return null;
         }
+    }
+
+    /**
+     * @template T
+     *
+     * @param CacheHit<T>|null $fallback
+     *
+     * @return LoadedDocument<T>
+     */
+    private static function staleOrThrow(?CacheHit $fallback, GdeSlonException $error): LoadedDocument
+    {
+        return $fallback !== null ? new LoadedDocument($fallback->value, DataOrigin::Stale) : throw $error;
     }
 
     /**

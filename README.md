@@ -61,7 +61,10 @@ $orders = $gdeslon->orders();
 `GdeSlon::create(?Config $config, ?HttpTransport $transport, ?CacheStore $cache, ?Clock $clock)` собирает
 cURL-транспорт с загрузкой частями и адаптеры всех ресурсов. Конструктор `new GdeSlon($transport, ...)` принимает
 собственные реализации портов (`CategoryRepository`, `MerchantRepository`, `ProductCatalog`, `OrderRepository`,
-`LostOrderClaims`, `Clock`, `CouponFeed`).
+`LostOrderClaims`, `Clock`, `CouponFeed`). Сигнатуры портов каталога:
+`CategoryRepository::all(bool $refresh = false): CategoryTree` и
+`MerchantRepository::all(bool $public = false, bool $refresh = false): MerchantList`; своя реализация, отдающая
+копию, помечает её через `withOrigin()` (см. «Кэширование»).
 
 ## Конфигурация
 
@@ -88,6 +91,7 @@ cURL-транспорт с загрузкой частями и адаптеры
 
 ```php
 $tree = $gdeslon->categories();
+$tree = $gdeslon->categories(refresh: true);   // в обход свежести кэша, см. «Кэширование»
 
 $tree->get(1114)->name();         // 'Женская одежда'; несуществующий ID — CategoryNotFoundException
 $tree->get(1114)->offerCount();   // ?int, API отдаёт счётчик не для всех категорий
@@ -135,6 +139,7 @@ $page = $gdeslon->search(new SearchCriteria(
 ```php
 $merchants = $gdeslon->merchants();
 $catalog = $gdeslon->merchants(public: true);   // affiliateLink() у всех null
+$merchants = $gdeslon->merchants(refresh: true); // в обход свежести кэша, см. «Кэширование»
 
 $shop = $merchants->get(105263);        // MerchantNotFoundException, если ID нет
 $shop->affiliateLink();                 // ?string
@@ -573,7 +578,7 @@ $coupons->skipped();
 
 Категории и магазины кэшируются через `CacheStore`. Внутри TTL документ отдаётся без запроса; после TTL —
 условный запрос (`If-None-Match`/`If-Modified-Since`), на 304 копия продлевается. При сетевой ошибке, 5xx или
-невалидном ответе возвращается сохранённая копия.
+невалидном ответе возвращается сохранённая копия, а сама копия не меняется.
 
 ```php
 use Webreboot\GdeSlon\Infrastructure\Cache\FileCacheStore;
@@ -581,7 +586,38 @@ use Webreboot\GdeSlon\Infrastructure\Cache\Psr16CacheStore;
 
 GdeSlon::create(cache: new FileCacheStore('/var/cache/gdeslon'));
 GdeSlon::create(cache: new Psr16CacheStore($psr16Cache));   // psr/simple-cache
+(new FileCacheStore('/var/cache/gdeslon'))->directory();     // '/var/cache/gdeslon' — как передан, ФС не трогается
 ```
+
+Откуда взяты данные, говорит `origin()` у `CategoryTree` и `MerchantList` (`Domain\Shared\DataOrigin`):
+
+| `origin()` | Когда | `isCurrent()` |
+|------------|-------|---------------|
+| `Fetched` | загружены из API: кэша нет, копии нет или пришла новая версия; также у снимка, созданного вручную | `true` |
+| `Cached` | копия в пределах TTL, без запроса | `true` |
+| `Revalidated` | API ответил 304 на условный запрос, копия продлена | `true` |
+| `Stale` | API недоступен (сеть, 5xx, невалидный ответ), отдана устаревшая копия | `false` |
+
+```php
+$tree = $gdeslon->categories();
+if (!$tree->origin()->isCurrent()) {
+    $logger->warning('категории из сохранённой копии: API недоступен');
+}
+
+$tree = $gdeslon->categories(refresh: true);                 // Fetched или Revalidated
+$merchants = $gdeslon->merchants(refresh: true);
+$catalog = $gdeslon->merchants(public: true, refresh: true);
+```
+
+- `Cached` считается актуальным при любом TTL: «актуально» значит «в пределах заданной вами свежести». Нужна
+  гарантия сверки с API — `refresh: true`.
+- `refresh: true` идёт в API даже при свежей копии, с её валидаторами (только имеющимися: у магазинов — только
+  `If-None-Match`); 304 продлевает копию, новая версия заменяет её. Устаревшую копию `refresh` не отдаёт: любой сбой
+  (сеть, таймаут, HTTP-ошибка любого статуса, невалидный ответ, неверный токен) — исключение, копия не тронута, и
+  следующий обычный вызов отдаст её как раньше. Без кэша `refresh` ничего не меняет.
+- Ошибка записи в кэш — не ошибка загрузки: данные возвращаются, копия просто не обновится (и при `refresh`).
+- `withOrigin(DataOrigin $origin)` возвращает копию снимка с другим происхождением — для собственных реализаций
+  портов; исходный объект не меняется.
 
 - Кэш магазинов содержит партнёрские ссылки вебмастера: каталог должен быть доступен только процессу приложения
   (не общий `/tmp`). Токен в кэш не записывается, кэши разных токенов разделены; публичный каталог

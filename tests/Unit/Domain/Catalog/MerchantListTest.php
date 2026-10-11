@@ -11,6 +11,7 @@ use Webreboot\GdeSlon\Domain\Catalog\MerchantCategory;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantNotFoundException;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
@@ -139,6 +140,29 @@ final class MerchantListTest extends TestCase
             $list->categories(),
         ));
         self::assertSame([82012], self::ids($list->filter(static fn (Merchant $m): bool => str_starts_with($m->url(), 'http://'))));
+    }
+
+    public function testOriginDefaultsToFetched(): void
+    {
+        self::assertSame(DataOrigin::Fetched, self::list()->origin());
+        self::assertSame(DataOrigin::Fetched, (new MerchantList([], ['x']))->origin());
+    }
+
+    public function testWithOriginKeepsMerchantsAndSkipped(): void
+    {
+        $list = new MerchantList(self::list()->all(), ['магазин «7»: нет поля url']);
+
+        $stale = $list->withOrigin(DataOrigin::Stale);
+
+        self::assertNotSame($list, $stale);
+        self::assertSame(DataOrigin::Stale, $stale->origin());
+        self::assertSame(DataOrigin::Fetched, $list->origin());
+        self::assertSame($list->all(), $stale->all());
+        self::assertSame($list->get(115651), $stale->get(115651));
+        self::assertSame(self::ids($list->findByDomain('mts.ru')), self::ids($stale->findByDomain('mts.ru')));
+        self::assertSame($list->categories(), $stale->categories());
+        self::assertSame(['магазин «7»: нет поля url'], $stale->skipped());
+        self::assertCount(5, $stale);
     }
 
     private static function list(): MerchantList

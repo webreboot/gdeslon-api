@@ -89,7 +89,7 @@ final class SearchCommand extends BaseCommand
 
         if ($subcategories) {
             try {
-                $criteria = Subcategories::expand($context->gdeslon()->categories(), $criteria, $categories, $excludedCategories);
+                $criteria = Subcategories::expand($context->categories(), $criteria, $categories, $excludedCategories);
             } catch (CategoryNotFoundException $e) {
                 $context->notice(sprintf('Категории %d нет', $e->categoryId()));
 

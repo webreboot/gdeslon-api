@@ -25,6 +25,7 @@ use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
 use Webreboot\GdeSlon\Domain\Promo\CouponCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Domain\Shared\SubId;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
@@ -86,22 +87,25 @@ final class GdeSlonTest extends TestCase
         $transport = new FakeHttpTransport();
         $repository = new FakeCategoryRepository(new CategoryTree([]));
 
-        $tree = (new GdeSlon($transport, $repository))->categories();
+        $gdeslon = new GdeSlon($transport, $repository);
 
-        self::assertCount(0, $tree);
-        self::assertSame(1, $repository->calls());
+        self::assertCount(0, $gdeslon->categories());
+        self::assertFalse($repository->lastRefresh());
+        self::assertCount(0, $gdeslon->categories(refresh: true));
+        self::assertTrue($repository->lastRefresh());
+        self::assertSame(2, $repository->calls());
         self::assertSame([], $transport->requests());
     }
 
     public function testCreateWiresCacheConfigAndTransport(): void
     {
+        $clock = FrozenClock::at('2026-10-07 12:00:00');
         $store = new InMemoryCacheStore();
         $url = 'https://api.gdeslon.ru/gdeslon-categories.json';
-        $storedAt = new \DateTimeImmutable('2000-01-01 00:00:00', new \DateTimeZone('UTC'));
-        $store->set(DocumentCache::key($url), (new CachedDocument(Fixtures::read('categories/categories.json'), '"6724af75-26edb"', null, $storedAt))->toString());
+        $store->set(DocumentCache::key($url), (new CachedDocument(Fixtures::read('categories/categories.json'), '"6724af75-26edb"', null, $clock->now()->modify('-3600 seconds')))->toString());
         $transport = (new FakeHttpTransport())->willReturn(304, '');
 
-        $tree = GdeSlon::create(new Config(cacheTtl: 3600), $transport, $store)->categories();
+        $tree = GdeSlon::create(new Config(cacheTtl: 3600), $transport, $store, $clock)->categories();
 
         self::assertCount(23, $tree);
         self::assertSame('"6724af75-26edb"', $transport->lastRequest()->header('If-None-Match'));
@@ -109,19 +113,67 @@ final class GdeSlonTest extends TestCase
 
     public function testCacheTtlFromConfigDecidesFreshness(): void
     {
+        $clock = FrozenClock::at('2026-10-07 12:00:00');
         $url = 'https://api.gdeslon.ru/gdeslon-categories.json';
-        $twoHoursAgo = new \DateTimeImmutable('-2 hours', new \DateTimeZone('UTC'));
-        $entry = (new CachedDocument(Fixtures::read('categories/categories.json'), '"6724af75-26edb"', null, $twoHoursAgo))->toString();
+        $entry = (new CachedDocument(Fixtures::read('categories/categories.json'), '"6724af75-26edb"', null, $clock->now()->modify('-2 hours')))->toString();
 
-        foreach ([3600 => 1, 86400 => 0] as $ttl => $expectedRequests) {
+        foreach ([[7200, 1, DataOrigin::Revalidated], [7201, 0, DataOrigin::Cached]] as [$ttl, $expectedRequests, $origin]) {
             $store = new InMemoryCacheStore();
             $store->set(DocumentCache::key($url), $entry);
             $transport = (new FakeHttpTransport())->willReturn(304, '');
 
-            GdeSlon::create(new Config(cacheTtl: $ttl), $transport, $store)->categories();
+            $tree = GdeSlon::create(new Config(cacheTtl: $ttl), $transport, $store, $clock)->categories();
 
             self::assertCount($expectedRequests, $transport->requests(), 'cacheTtl ' . $ttl);
+            self::assertSame($origin, $tree->origin(), 'cacheTtl ' . $ttl);
         }
+    }
+
+    public function testRefreshWithStaleCopyAndTimeoutThrowsAndKeepsCopy(): void
+    {
+        $clock = FrozenClock::at('2026-10-07 12:00:00');
+        $store = new InMemoryCacheStore();
+        $store->set(DocumentCache::key('https://api.gdeslon.ru/gdeslon-categories.json'), (new CachedDocument(Fixtures::read('categories/categories.json'), '"e"', null, $clock->now()->modify('-2 days')))->toString());
+        $store->set(DocumentCache::key('https://www.gdeslon.ru/api/users/shops.xml#' . hash('sha256', 't')), (new CachedDocument(Fixtures::read('merchants/shops.xml'), 'W/"e"', null, $clock->now()->modify('-2 days')))->toString());
+        $before = $store->all();
+        $timeout = new TimeoutException('таймаут', 'GET', 'https://api.gdeslon.ru/', 28);
+        $transport = (new FakeHttpTransport())->willThrow($timeout)->willThrow($timeout)->willThrow($timeout)->willThrow($timeout);
+        $gdeslon = GdeSlon::create(new Config(apiToken: 't'), $transport, $store, $clock);
+
+        foreach ([static fn () => $gdeslon->categories(refresh: true), static fn () => $gdeslon->merchants(refresh: true)] as $call) {
+            try {
+                $call();
+                self::fail('Ожидалось исключение');
+            } catch (TimeoutException $e) {
+                self::assertSame($timeout, $e);
+            }
+        }
+        self::assertSame($before, $store->all());
+
+        $tree = $gdeslon->categories();
+        self::assertCount(23, $tree);
+        self::assertSame(DataOrigin::Stale, $tree->origin());
+        $list = $gdeslon->merchants();
+        self::assertCount(9, $list);
+        self::assertSame(DataOrigin::Stale, $list->origin());
+        self::assertSame($before, $store->all());
+    }
+
+    public function testCategoriesOriginThroughFacade(): void
+    {
+        $clock = FrozenClock::at('2026-10-07 12:00:00');
+        $store = new InMemoryCacheStore();
+        $store->set(DocumentCache::key('https://api.gdeslon.ru/gdeslon-categories.json'), (new CachedDocument(Fixtures::read('categories/categories.json'), '"e"', null, $clock->now()))->toString());
+        $transport = new FakeHttpTransport();
+
+        self::assertSame(DataOrigin::Cached, GdeSlon::create(new Config(), $transport, $store, $clock)->categories()->origin());
+        self::assertSame([], $transport->requests());
+
+        $repository = new FakeCategoryRepository((new CategoryTree([]))->withOrigin(DataOrigin::Stale));
+        self::assertSame(DataOrigin::Stale, (new GdeSlon($transport, $repository))->categories()->origin());
+
+        $merchants = new FakeMerchantRepository((new MerchantList([]))->withOrigin(DataOrigin::Revalidated));
+        self::assertSame(DataOrigin::Revalidated, (new GdeSlon($transport, null, $merchants))->merchants(public: true)->origin());
     }
 
     public function testOwnTransportIsNotWrappedWithRange(): void
@@ -198,9 +250,17 @@ final class GdeSlonTest extends TestCase
 
         self::assertCount(0, $gdeslon->merchants());
         self::assertFalse($repository->lastPublic());
+        self::assertFalse($repository->lastRefresh());
         self::assertCount(0, $gdeslon->merchants(public: true));
         self::assertTrue($repository->lastPublic());
-        self::assertSame(2, $repository->calls());
+        self::assertFalse($repository->lastRefresh());
+        self::assertCount(0, $gdeslon->merchants(refresh: true));
+        self::assertFalse($repository->lastPublic());
+        self::assertTrue($repository->lastRefresh());
+        self::assertCount(0, $gdeslon->merchants(public: true, refresh: true));
+        self::assertTrue($repository->lastPublic());
+        self::assertTrue($repository->lastRefresh());
+        self::assertSame(4, $repository->calls());
         self::assertSame([], $transport->requests());
     }
 
@@ -223,19 +283,20 @@ final class GdeSlonTest extends TestCase
 
     public function testMerchantCacheTtlAndKeyFromConfig(): void
     {
+        $clock = FrozenClock::at('2026-10-07 12:00:00');
         $url = 'https://www.gdeslon.ru/api/users/shops.xml';
-        $twoHoursAgo = new \DateTimeImmutable('-2 hours', new \DateTimeZone('UTC'));
-        $entry = (new CachedDocument(Fixtures::read('merchants/shops.xml'), 'W/"e"', null, $twoHoursAgo))->toString();
+        $entry = (new CachedDocument(Fixtures::read('merchants/shops.xml'), 'W/"e"', null, $clock->now()->modify('-2 hours')))->toString();
 
-        foreach ([3600 => 1, 86400 => 0] as $ttl => $expectedRequests) {
+        foreach ([[7200, 1, DataOrigin::Revalidated], [7201, 0, DataOrigin::Cached]] as [$ttl, $expectedRequests, $origin]) {
             $store = new InMemoryCacheStore();
             $store->set(DocumentCache::key($url . '#' . hash('sha256', 't')), $entry);
             $transport = (new FakeHttpTransport())->willReturn(304, '');
 
-            $list = GdeSlon::create(new Config(apiToken: 't', merchantCacheTtl: $ttl), $transport, $store)->merchants();
+            $list = GdeSlon::create(new Config(apiToken: 't', merchantCacheTtl: $ttl), $transport, $store, $clock)->merchants();
 
             self::assertCount(9, $list);
             self::assertCount($expectedRequests, $transport->requests(), 'merchantCacheTtl ' . $ttl);
+            self::assertSame($origin, $list->origin(), 'merchantCacheTtl ' . $ttl);
         }
     }
 

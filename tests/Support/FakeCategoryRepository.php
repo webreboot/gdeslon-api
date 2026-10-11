@@ -11,13 +11,16 @@ final class FakeCategoryRepository implements CategoryRepository
 {
     private int $calls = 0;
 
+    private ?bool $lastRefresh = null;
+
     public function __construct(private readonly CategoryTree $tree)
     {
     }
 
-    public function all(): CategoryTree
+    public function all(bool $refresh = false): CategoryTree
     {
         $this->calls++;
+        $this->lastRefresh = $refresh;
 
         return $this->tree;
     }
@@ -25,5 +28,10 @@ final class FakeCategoryRepository implements CategoryRepository
     public function calls(): int
     {
         return $this->calls;
+    }
+
+    public function lastRefresh(): ?bool
+    {
+        return $this->lastRefresh;
     }
 }

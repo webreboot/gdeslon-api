@@ -189,7 +189,7 @@ final class McpServerTest extends TestCase
     public function testInternalErrorKeepsServerAndHidesSecrets(): void
     {
         $failing = new class () implements CategoryRepository {
-            public function all(): CategoryTree
+            public function all(bool $refresh = false): CategoryTree
             {
                 throw new \RuntimeException('boom secret-token-0123');
             }

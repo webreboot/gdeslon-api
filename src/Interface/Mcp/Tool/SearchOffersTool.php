@@ -108,7 +108,7 @@ final class SearchOffersTool extends ReadTool
 
         if ($subcategories) {
             try {
-                $criteria = Subcategories::expand($context->gdeslon()->categories(), $criteria, $categories, $excludedCategories);
+                $criteria = Subcategories::expand($context->categories(), $criteria, $categories, $excludedCategories);
             } catch (CategoryNotFoundException $e) {
                 throw new NotFoundException(sprintf('Категории %d нет', $e->categoryId()), 0, $e);
             }

@@ -43,7 +43,10 @@ final class CategoriesCommand extends BaseCommand
 
     public function options(): array
     {
-        return [Option::value('depth', 'сколько уровней подкатегорий показать (по умолчанию — все)', 'N')];
+        return [
+            Option::value('depth', 'сколько уровней подкатегорий показать (по умолчанию — все)', 'N'),
+            Option::flag('refresh', 'загрузить заново, даже если копия в кэше свежая; при сбое — ошибка'),
+        ];
     }
 
     public function credentials(): Credentials
@@ -59,7 +62,7 @@ final class CategoriesCommand extends BaseCommand
         $id = $arguments === [] ? null : self::idArgument($arguments, 'ID категории');
         $depth = self::intOption($input, 'depth');
 
-        $tree = $context->gdeslon()->categories();
+        $tree = $context->categories($input->flag('refresh'));
         if ($id !== null && !$tree->has($id)) {
             $context->notice(sprintf('Категории %d нет', $id));
 

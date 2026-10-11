@@ -37,6 +37,17 @@
   `null` — выключить), не больше 20 под-запросов. `SearchResult::isDegraded()` и `effectiveLimit()`; `criteria()` и
   `nextPage()` — от исходного запроса. `SearchCriteria::withLimit()`. В JSON CLI и MCP поиска — `effective_limit` и
   `degraded`, в строке статуса CLI — «загружено частями по N» (см. README, «Повтор меньшими страницами»).
+- `categories(refresh: true)`, `merchants(refresh: true)`, `merchants(public: true, refresh: true)` — загрузка в обход
+  свежести кэша: запрос с валидаторами копии даже при свежей копии, 304 продлевает её, новая версия заменяет. Любой
+  сбой — исключение, копия не тронута (устаревшая копия при `refresh` не отдаётся).
+- `DataOrigin` (`Fetched`, `Cached`, `Revalidated`, `Stale`; `isCurrent()`) и `origin()` у `CategoryTree` и
+  `MerchantList`: откуда данные — из API, из свежей копии, после 304 или из устаревшей копии при недоступном API
+  (раньше такая подмена была молчаливой). `withOrigin()` — копия снимка с другим происхождением; созданный вручную
+  снимок — `Fetched` (см. README, «Кэширование»).
+- `FileCacheStore::directory()` — каталог кэша, как передан в конструктор.
+- CLI: флаг `--refresh` у `categories` и `merchants [list]` (сбой — код 1 или 3, копия не тронута); при данных из
+  устаревшей копии — предупреждение в stderr, stdout и JSON не меняются. MCP: при устаревшей копии — строка
+  `gdeslon mcp: …` в stderr, ответы инструментов не меняются.
 
 ### Безопасность
 
@@ -61,6 +72,10 @@
 
 ### Изменено
 
+- Порты каталога получили параметр `refresh`. Свои реализации нужно обновить, иначе фатальная ошибка объявления
+  класса: `CategoryRepository::all(bool $refresh = false): CategoryTree` и
+  `MerchantRepository::all(bool $public = false, bool $refresh = false): MerchantList`. Отдавая копию, помечайте её
+  `withOrigin()`, например `$tree->withOrigin(DataOrigin::Stale)`.
 - Поиск после таймаута делает до 20 дополнительных запросов и ждёт дольше: до `timeout` × (число под-запросов + 1).
   Без `query` склеенная страница может содержать повторы — убирайте их по `Offer::key()`. Подсказка в
   `TimeoutException` поиска — без «увеличьте Config::timeout». Свой `HttpTransport` должен бросать `TimeoutException`

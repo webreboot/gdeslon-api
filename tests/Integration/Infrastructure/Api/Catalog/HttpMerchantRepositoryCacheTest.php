@@ -6,9 +6,13 @@ namespace Webreboot\GdeSlon\Tests\Integration\Infrastructure\Api\Catalog;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Domain\Shared\DataOrigin;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
+use Webreboot\GdeSlon\Exception\GdeSlonException;
+use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
+use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpCategoryRepository;
@@ -59,20 +63,26 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
     {
         $this->transport->willReturn(200, self::fixture(), ['ETag' => [self::ETAG]])->willReturn(304, '', ['ETag' => [self::ETAG]]);
         $repository = $this->repository(self::TOKEN);
-        $repository->all();
+        self::assertSame(DataOrigin::Fetched, $repository->all()->origin());
 
         $this->clock->advance(self::TTL - 1);
-        self::assertCount(9, $repository->all());
+        $cached = $repository->all();
+        self::assertCount(9, $cached);
+        self::assertSame(DataOrigin::Cached, $cached->origin());
         self::assertCount(1, $this->transport->requests(), 'свежая запись — без запроса');
 
         $this->clock->advance(1);
-        self::assertCount(9, $repository->all());
+        $revalidated = $repository->all();
+        self::assertCount(9, $revalidated);
+        self::assertSame(DataOrigin::Revalidated, $revalidated->origin());
         $request = $this->transport->lastRequest();
         self::assertSame(self::ETAG, $request->header('If-None-Match'));
         self::assertNull($request->header('If-Modified-Since'));
         self::assertSame('https://www.gdeslon.ru/api/users/shops.xml?api_token=' . self::TOKEN, $request->uri());
 
-        self::assertCount(9, $repository->all());
+        $again = $repository->all();
+        self::assertCount(9, $again);
+        self::assertSame(DataOrigin::Cached, $again->origin());
         self::assertCount(2, $this->transport->requests(), 'после 304 запись снова свежая');
     }
 
@@ -85,7 +95,9 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
         $reordered = self::shops(['117999', '105263']);
         $this->transport->willReturn(200, $reordered, ['ETag' => ['W/"other"']]);
 
-        self::assertCount(2, $repository->all());
+        $list = $repository->all();
+        self::assertCount(2, $list);
+        self::assertSame(DataOrigin::Fetched, $list->origin());
         $stored = $this->stored();
         self::assertNotNull($stored);
         self::assertSame($reordered, $stored->body());
@@ -105,24 +117,30 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
     }
 
     #[DataProvider('outages')]
-    public function testStaleEntryIsServedOnOutage(?TimeoutException $exception, int $status): void
+    public function testStaleEntryIsServedOnOutage(?TransportException $exception, int $status): void
     {
         $this->transport->willReturn(200, self::fixture(), ['ETag' => [self::ETAG]]);
         $repository = $this->repository(self::TOKEN);
         $repository->all();
+        $before = $this->store->all();
         $this->clock->advance(self::TTL * 10);
         $exception === null ? $this->transport->willReturn($status, 'busy') : $this->transport->willThrow($exception);
 
-        self::assertCount(9, $repository->all());
+        $list = $repository->all();
+
+        self::assertCount(9, $list);
+        self::assertSame(DataOrigin::Stale, $list->origin());
+        self::assertSame($before, $this->store->all());
     }
 
     /**
-     * @return iterable<string, array{?TimeoutException, int}>
+     * @return iterable<string, array{?TransportException, int}>
      */
     public static function outages(): iterable
     {
         yield 'таймаут' => [new TimeoutException('таймаут', 'GET', 'https://www.gdeslon.ru/', 28), 0];
-        yield '503' => [null, 503];
+        yield 'отказ' => [new TransportException('отказ', 'GET', 'https://www.gdeslon.ru/', 7), 0];
+        yield 'HTTP 503' => [null, 503];
     }
 
     public function testForbiddenIsNotHiddenByCache(): void
@@ -146,7 +164,9 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
         $this->clock->advance(self::TTL);
         $this->transport->willReturn(200, '<shops><shop>', ['ETag' => ['W/"new"']]);
 
-        self::assertCount(9, $repository->all());
+        $list = $repository->all();
+        self::assertCount(9, $list);
+        self::assertSame(DataOrigin::Stale, $list->origin());
         self::assertSame($before, $this->store->all());
     }
 
@@ -159,7 +179,9 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
         $this->clock->advance(self::TTL);
         $this->transport->willReturn(200, str_replace('<url>', '<site>', str_replace('</url>', '</site>', self::fixture())), ['ETag' => ['W/"new"']]);
 
-        self::assertCount(9, $repository->all());
+        $list = $repository->all();
+        self::assertCount(9, $list);
+        self::assertSame(DataOrigin::Stale, $list->origin());
         self::assertSame($before, $this->store->all());
     }
 
@@ -177,6 +199,7 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
 
         self::assertCount(2, $list);
         self::assertCount(7, $list->skipped());
+        self::assertSame(DataOrigin::Fetched, $list->origin());
         self::assertSame($before, $this->store->all(), 'рабочая копия не вытесняется ответом с пропусками');
 
         $empty = new InMemoryCacheStore();
@@ -307,11 +330,170 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
         self::assertCount(2, $this->transport->requests());
     }
 
+    public function testRefreshRevalidatesFreshEntryWithEtag(): void
+    {
+        $this->transport->willReturn(200, self::fixture(), ['ETag' => [self::ETAG]])->willReturn(304, '', ['ETag' => [self::ETAG]]);
+        $repository = $this->repository(self::TOKEN);
+        $repository->all();
+        $this->clock->advance(10);
+
+        $list = $repository->all(refresh: true);
+
+        self::assertCount(9, $list);
+        self::assertSame(DataOrigin::Revalidated, $list->origin());
+        $request = $this->transport->lastRequest();
+        self::assertSame(self::ETAG, $request->header('If-None-Match'));
+        self::assertNull($request->header('If-Modified-Since'));
+        self::assertSame('https://www.gdeslon.ru/api/users/shops.xml?api_token=' . self::TOKEN, $request->uri());
+        self::assertSame($this->clock->now()->getTimestamp(), $this->stored()?->storedAt()->getTimestamp());
+
+        $reordered = self::shops(['117999', '105263']);
+        $this->transport->willReturn(200, $reordered, ['ETag' => ['W/"other"']]);
+        $replaced = $repository->all(refresh: true);
+        self::assertCount(2, $replaced);
+        self::assertSame(DataOrigin::Fetched, $replaced->origin());
+        self::assertSame($reordered, $this->stored()?->body());
+        self::assertSame(DataOrigin::Cached, $repository->all()->origin());
+        self::assertCount(3, $this->transport->requests());
+    }
+
+    /**
+     * @param \Closure(FakeHttpTransport): FakeHttpTransport $response
+     * @param class-string<GdeSlonException>                 $expected
+     */
+    #[DataProvider('refreshFailures')]
+    public function testRefreshFailureThrowsAndKeepsCopy(\Closure $response, string $expected): void
+    {
+        $this->transport->willReturn(200, self::fixture(), ['ETag' => [self::ETAG]]);
+        $repository = $this->repository(self::TOKEN);
+        $repository->all();
+        $before = $this->store->all();
+        $response($this->transport);
+
+        try {
+            $repository->all(refresh: true);
+            self::fail('Ожидалось исключение');
+        } catch (GdeSlonException $e) {
+            self::assertSame($expected, $e::class);
+        }
+
+        self::assertSame($before, $this->store->all());
+        self::assertCount(2, $this->transport->requests());
+        self::assertSame(DataOrigin::Cached, $repository->all()->origin());
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(FakeHttpTransport): FakeHttpTransport, class-string<GdeSlonException>}>
+     */
+    public static function refreshFailures(): iterable
+    {
+        yield 'таймаут' => [static fn (FakeHttpTransport $t) => $t->willThrow(new TimeoutException('таймаут', 'GET', 'https://www.gdeslon.ru/', 28)), TimeoutException::class];
+        yield 'отказ' => [static fn (FakeHttpTransport $t) => $t->willFail(7), TransportException::class];
+        yield 'HTTP 500' => [static fn (FakeHttpTransport $t) => $t->willReturn(500, 'busy'), HttpException::class];
+        yield 'HTTP 503' => [static fn (FakeHttpTransport $t) => $t->willReturn(503, 'busy'), HttpException::class];
+        yield 'HTTP 404' => [static fn (FakeHttpTransport $t) => $t->willReturn(404, 'нет'), HttpException::class];
+        yield 'HTTP 403' => [static fn (FakeHttpTransport $t) => $t->willReturn(403, 'нет'), AuthenticationException::class];
+        yield 'HTTP 401' => [static fn (FakeHttpTransport $t) => $t->willReturn(401, 'нет'), AuthenticationException::class];
+        yield 'битый XML' => [static fn (FakeHttpTransport $t) => $t->willReturn(200, '<shops><shop>', ['ETag' => ['W/"new"']]), UnexpectedResponseException::class];
+        yield 'токен не принят' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(200, Fixtures::read('merchants/shops-public.xml'), ['ETag' => ['W/"new"']]),
+            AuthenticationException::class,
+        ];
+    }
+
+    public function testRefreshWithSkippedRecordsReturnsFetchedListAndKeepsCopy(): void
+    {
+        $partial = str_replace('rate_type="percent"', 'rate_type="percentage"', str_replace('rate_type="fixed"', 'rate_type="percentage"', self::fixture()));
+        $this->transport->willReturn(200, self::fixture(), ['ETag' => [self::ETAG]])->willReturn(200, $partial, ['ETag' => ['W/"new"']]);
+        $repository = $this->repository(self::TOKEN);
+        $repository->all();
+        $before = $this->store->all();
+
+        $list = $repository->all(refresh: true);
+
+        self::assertCount(2, $list);
+        self::assertCount(7, $list->skipped());
+        self::assertSame(DataOrigin::Fetched, $list->origin());
+        self::assertSame($before, $this->store->all());
+    }
+
+    public function testRefreshInPublicModeUsesTokenlessEntry(): void
+    {
+        $this->transport->willReturn(200, self::publicFixture(), ['ETag' => [self::ETAG]])->willReturn(304, '', ['ETag' => [self::ETAG]]);
+        $repository = $this->repository(self::TOKEN);
+        $repository->all(public: true);
+
+        $list = $repository->all(public: true, refresh: true);
+
+        self::assertCount(2, $list);
+        self::assertSame(DataOrigin::Revalidated, $list->origin());
+        $request = $this->transport->lastRequest();
+        self::assertSame(HttpMerchantRepository::DEFAULT_URL, $request->uri());
+        self::assertSame(self::ETAG, $request->header('If-None-Match'));
+        self::assertSame([DocumentCache::key(HttpMerchantRepository::DEFAULT_URL . '#' . hash('sha256', ''))], array_keys($this->store->all()));
+
+        $this->transport->willReturn(304, '');
+        self::assertSame(DataOrigin::Revalidated, $this->repository(null)->all(public: true, refresh: true)->origin(), 'публичная копия общая и без токена');
+        self::assertCount(1, $this->store->all());
+    }
+
+    public function testRefreshWithoutTokenFailsBeforeRequestAndStore(): void
+    {
+        $store = new class () implements CacheStore {
+            public int $calls = 0;
+
+            public function get(string $key): ?string
+            {
+                $this->calls++;
+
+                return null;
+            }
+
+            public function set(string $key, string $value): bool
+            {
+                $this->calls++;
+
+                return true;
+            }
+        };
+
+        try {
+            (new HttpMerchantRepository(new ApiClient($this->transport), null, new DocumentCache($store, $this->clock, self::TTL)))->all(refresh: true);
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('merchants(public: true)', $e->getMessage());
+        }
+
+        self::assertSame(0, $store->calls);
+        self::assertSame([], $this->transport->requests());
+    }
+
+    public function testRefreshTokensDoNotShareCache(): void
+    {
+        $this->transport->willReturn(200, self::fixture(), ['ETag' => [self::ETAG]])->willReturn(200, self::shops(['105263']), ['ETag' => ['W/"b"']]);
+        $this->repository('token-a')->all();
+        $first = $this->store->all();
+
+        $list = $this->repository('token-b')->all(refresh: true);
+
+        self::assertCount(1, $list);
+        self::assertSame(DataOrigin::Fetched, $list->origin());
+        self::assertNull($this->transport->lastRequest()->header('If-None-Match'), 'копии token-a нет у token-b');
+        self::assertCount(2, $this->store->all());
+        foreach ($first as $key => $value) {
+            self::assertSame($value, $this->store->all()[$key]);
+        }
+        self::assertSame(DataOrigin::Cached, $this->repository('token-a')->all()->origin());
+    }
+
     private function repository(?string $token): HttpMerchantRepository
     {
         return new HttpMerchantRepository(new ApiClient($this->transport), $token, new DocumentCache($this->store, $this->clock, self::TTL));
     }
 
+    /**
+     * @phpstan-impure
+     */
     private function stored(): ?CachedDocument
     {
         $value = $this->store->all() === [] ? null : array_values($this->store->all())[0];

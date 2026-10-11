@@ -33,6 +33,15 @@ final class FileCacheStoreTest extends TestCase
         self::assertNull($store->get('gdeslon_missing'));
     }
 
+    public function testDirectoryIsReturnedAsGivenWithoutTouchingFilesystem(): void
+    {
+        $directory = $this->root . '/nested/../cache/';
+
+        self::assertSame($directory, (new FileCacheStore($directory))->directory());
+        self::assertSame('relative/cache', (new FileCacheStore('relative/cache'))->directory());
+        self::assertDirectoryDoesNotExist($this->root);
+    }
+
     public function testCreatesPrivateDirectoryOnFirstWrite(): void
     {
         $directory = $this->root . '/nested/cache';
