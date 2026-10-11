@@ -6,8 +6,10 @@ namespace Webreboot\GdeSlon\Tests\Unit\Domain\Catalog;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\OfferKey;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
@@ -61,6 +63,76 @@ final class OfferTest extends TestCase
         yield 'пустая ссылка' => ['1', 'x', ''];
         yield 'ссылка без схемы' => ['1', 'x', 'af.gdeslon.ru/cm/x'];
         yield 'ссылка ftp' => ['1', 'x', 'ftp://x'];
+        yield 'ссылка с пробелом' => ['1', 'x', 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&goto=https://x.ru/a b'];
+        yield 'ссылка с переводом строки' => ['1', 'x', self::LINK . "\n"];
+    }
+
+    public function testInvalidLinkMessageHasOfferIdButNoLink(): void
+    {
+        try {
+            new Offer('42', new MerchantId(1), 'x', new Money('1', 'RUB'), 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?goto=a b');
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('оффера 42', $e->getMessage());
+            self::assertStringNotContainsString('0a1b2c3d4e', $e->getMessage());
+        }
+    }
+
+    public function testLinkMatchesAffiliateLink(): void
+    {
+        $offer = new Offer('1', new MerchantId(107054), 'x', new Money('1', 'RUB'), self::LINK);
+
+        self::assertSame(self::LINK, $offer->link()->url());
+        self::assertSame($offer->affiliateLink(), $offer->link()->url());
+        self::assertSame(self::LINK . '&sub_id=site', $offer->link()->withSubId('site')->url());
+        self::assertSame(self::LINK, $offer->affiliateLink());
+    }
+
+    public function testAcceptsAffiliateLinkInstance(): void
+    {
+        $link = AffiliateLink::fromString(self::LINK);
+
+        $offer = new Offer('1', new MerchantId(107054), 'x', new Money('1', 'RUB'), $link);
+
+        self::assertSame($link, $offer->link());
+        self::assertSame(self::LINK, $offer->affiliateLink());
+    }
+
+    public function testEridFromMarkingFirst(): void
+    {
+        $offer = self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=2SDnjLINK01', 'Реклама. ООО «Слон», https://x.ru/ erid 2SDnjMARK01');
+
+        self::assertSame('2SDnjMARK01', $offer->erid());
+    }
+
+    public function testEridFallsBackToLink(): void
+    {
+        $link = 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=2SDnjLINK01';
+
+        self::assertSame('2SDnjLINK01', self::offerWith($link, 'Реклама. Рекламодатель ООО «Слон» ИНН 7700000000 , https://x.ru')->erid());
+        self::assertSame('2SDnjLINK01', self::offerWith($link, null)->erid());
+        self::assertSame('2SDnjLINK01', self::offerWith($link, 'Реклама. Рекламодатель ООО Eridanus ИНН 7700000000 , https://eridanus.ru')->erid());
+    }
+
+    public function testEridNullWhenNowhere(): void
+    {
+        $link = 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=82012&goto=https%3A%2F%2Fs.click.aliexpress.com%2Fs%2FAbC';
+
+        self::assertNull(self::offerWith($link, 'Реклама. Рекламодатель http://aliexpress.com/.')->erid());
+        self::assertNull(self::offerWith($link, null)->erid());
+        self::assertNull(self::offerWith(self::LINK, null)->erid(), 'erid=abc — не erid');
+    }
+
+    public function testKey(): void
+    {
+        $offer = new Offer('1', new MerchantId(107054), 'x', new Money('1', 'RUB'), self::LINK, article: '578237');
+
+        self::assertSame('107054:578237', (string) $offer->key());
+        self::assertTrue(OfferKey::fromString('107054:578237')->equals($offer->key() ?? throw new \LogicException()));
+        self::assertNull((new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK))->key());
+        self::assertNull((new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, article: '  '))->key());
+        $other = new Offer('2', new MerchantId(113068), 'y', new Money('1', 'RUB'), self::LINK, article: '578237');
+        self::assertFalse($other->key()?->equals($offer->key()));
     }
 
     public function testParkedDomainLinkIsAccepted(): void
@@ -220,5 +292,10 @@ final class OfferTest extends TestCase
         );
 
         self::assertSame(['https://p/big.jpg'], $offer->pictureCandidates());
+    }
+
+    private static function offerWith(string $link, ?string $adMarking): Offer
+    {
+        return new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), $link, adMarking: $adMarking);
     }
 }

@@ -101,6 +101,13 @@ final class McpToolsTest extends TestCase
     {
         $data = McpTester::structured(self::mcp(200, Fixtures::read('merchants/shops.xml'))->call('get_merchant', ['merchant_id' => 105263], self::TOKEN));
         self::assertShape(['merchant' => JsonShapes::MERCHANT], $data);
+        self::assertIsArray($data['merchant']);
+        self::assertSame('Kra23dyAk', $data['merchant']['erid']);
+        $data = McpTester::structured(self::mcp(200, Fixtures::read('merchants/shops.xml'))->call('get_merchant', ['merchant_id' => 101124], self::TOKEN));
+        self::assertIsArray($data['merchant']);
+        self::assertSame(['affiliate_link' => null, 'erid' => 'Kra2449mN'], array_intersect_key($data['merchant'], ['affiliate_link' => true, 'erid' => true]));
+        $data = McpTester::structured(self::mcp(200, Fixtures::read('merchants/shops.xml'))->call('list_merchants', ['search' => 'KOMUS'], self::TOKEN));
+        self::assertSame(['2SDnjckjwUs'], array_column((array) $data['merchants'], 'erid'));
 
         self::assertSame('[not_found] Магазина 1 нет', McpTester::failure(self::mcp(200, Fixtures::read('merchants/shops.xml'))->call('get_merchant', ['merchant_id' => 1], self::TOKEN)));
         self::assertStringStartsWith('[invalid_arguments] ', McpTester::failure((new McpTester())->call('get_merchant')), 'merchant_id обязателен');
@@ -176,6 +183,10 @@ final class McpToolsTest extends TestCase
         self::assertSame(['amount' => '100', 'currency' => 'RUB'], $data['offers'][0]['price']);
         self::assertIsArray($data['offers'][2]);
         self::assertNull($data['offers'][2]['charge']);
+        self::assertSame('2SDnjcZqvUG', $data['offers'][0]['erid']);
+        self::assertSame('107054:578237', $data['offers'][0]['key']);
+        self::assertIsArray($data['offers'][3]);
+        self::assertNull($data['offers'][3]['erid']);
         self::assertIsArray($data['skipped']);
         self::assertCount(1, $data['skipped']);
 
@@ -394,6 +405,8 @@ final class McpToolsTest extends TestCase
 
         $data = McpTester::structured(self::mcp(200, Fixtures::read('coupons/coupons.xml'))->call('get_coupon', ['coupon_id' => 336004], $env));
         self::assertShape(['coupon' => JsonShapes::COUPON], $data);
+        self::assertIsArray($data['coupon']);
+        self::assertSame('2SDnjTEST001', $data['coupon']['erid']);
         self::assertSame('[not_found] Купона 1 нет', McpTester::failure(self::mcp(200, Fixtures::read('coupons/coupons.xml'))->call('get_coupon', ['coupon_id' => 1], $env)));
         $kinds = McpTester::structured(self::mcp(200, Fixtures::read('coupons/coupons.xml'))->call('list_coupon_kinds', [], $env));
         self::assertShape(['kinds' => ['[]' => JsonShapes::COUPON_KIND]], $kinds);

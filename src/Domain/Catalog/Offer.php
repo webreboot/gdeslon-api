@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Catalog;
 
+use Webreboot\GdeSlon\Domain\Shared\AdMarking;
 use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
@@ -20,12 +21,16 @@ final class Offer
 
     private readonly ?string $adMarking;
 
+    private readonly AffiliateLink $link;
+
+    private readonly ?OfferKey $key;
+
     public function __construct(
         private readonly string $id,
         private readonly MerchantId $merchantId,
         string $name,
         private readonly Money $price,
-        private readonly string $affiliateLink,
+        string|AffiliateLink $affiliateLink,
         private readonly ?Money $oldPrice = null,
         private readonly ?Money $charge = null,
         private readonly ?string $article = null,
@@ -47,8 +52,10 @@ final class Offer
         if ($name === '') {
             throw new InvalidArgumentException(sprintf('Пустое название оффера %s', $id));
         }
-        if (!HttpUrl::isValid($affiliateLink)) {
-            throw new InvalidArgumentException(sprintf('Партнёрская ссылка оффера %s: ожидался адрес http(s)://', $id));
+        try {
+            $link = is_string($affiliateLink) ? AffiliateLink::fromString($affiliateLink) : $affiliateLink;
+        } catch (InvalidArgumentException) {
+            throw new InvalidArgumentException(sprintf('Партнёрская ссылка оффера %s: ожидался адрес http(s):// без пробелов и управляющих символов', $id));
         }
         foreach (['picture' => $picture, 'thumbnail' => $thumbnail, 'originalPicture' => $originalPicture, 'productUrl' => $productUrl] as $field => $url) {
             if ($url !== null && !HttpUrl::isValid($url)) {
@@ -65,6 +72,8 @@ final class Offer
         }
 
         $this->name = $name;
+        $this->link = $link;
+        $this->key = self::keyOf($merchantId, $article);
         $this->description = self::text($description);
         $this->vendor = self::text($vendor);
         $this->model = self::text($model);
@@ -93,7 +102,22 @@ final class Offer
 
     public function affiliateLink(): string
     {
-        return $this->affiliateLink;
+        return $this->link->url();
+    }
+
+    public function link(): AffiliateLink
+    {
+        return $this->link;
+    }
+
+    public function erid(): ?string
+    {
+        return AdMarking::erid($this->adMarking) ?? $this->link->erid();
+    }
+
+    public function key(): ?OfferKey
+    {
+        return $this->key;
     }
 
     public function oldPrice(): ?Money
@@ -170,6 +194,19 @@ final class Offer
             [$this->originalPicture, $this->picture, $this->thumbnail],
             static fn (?string $url): bool => $url !== null,
         )));
+    }
+
+    private static function keyOf(MerchantId $merchantId, ?string $article): ?OfferKey
+    {
+        if ($article === null) {
+            return null;
+        }
+
+        try {
+            return new OfferKey($merchantId, $article);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
     }
 
     private static function text(?string $value): ?string

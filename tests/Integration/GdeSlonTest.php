@@ -26,6 +26,7 @@ use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
 use Webreboot\GdeSlon\Domain\Promo\CouponCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Shared\Money;
+use Webreboot\GdeSlon\Domain\Shared\SubId;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
@@ -279,6 +280,20 @@ final class GdeSlonTest extends TestCase
         self::assertSame('secret-token', $transport->lastRequest()->query()['_gs_at'] ?? null);
         self::assertSame('iphone -pink', $transport->lastRequest()->query()['q'] ?? null);
         self::assertSame('iphone -pink', $result->criteria()->query());
+    }
+
+    public function testOfferLinkWithSubIdFromSearch(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('search/search.xml'));
+
+        $offer = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport)->search('пакет')->offers()[0];
+
+        $url = 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=107054&goto=https%3A%2F%2Famwine.ru%2Fcatalog%2Faksessuary%2Fpodarochnye_pakety_i_korobki%2Fpaket_podarochnyy_m_180_227_100%2F&erid=2SDnjcZqvUG';
+        self::assertSame($url . '&sub_id=tg_channel-42', (string) $offer->link()->withSubId('tg_channel-42'));
+        self::assertSame($url . '&sub_id=tg_channel-42&sub_id2=post-7', $offer->link()->withSubId('tg_channel-42')->withSubId(new SubId('post-7'), 2)->url());
+        self::assertSame($url, $offer->affiliateLink());
+        self::assertSame('2SDnjcZqvUG', $offer->erid());
+        self::assertSame('107054:578237', (string) $offer->key());
     }
 
     public function testSearchBySubtreeSendsWholeSubtree(): void

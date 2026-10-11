@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Catalog;
 
+use Webreboot\GdeSlon\Domain\Shared\AdMarking;
 use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class Merchant
 {
     private readonly string $name;
+
+    private readonly ?AffiliateLink $link;
 
     private readonly string $description;
 
@@ -38,7 +41,7 @@ final class Merchant
         private readonly bool $green = false,
         ?string $commissionSummary = null,
         private readonly array $categories = [],
-        private readonly ?string $affiliateLink = null,
+        string|AffiliateLink|null $affiliateLink = null,
         private readonly array $trafficTypes = [],
         private readonly array $tariffs = [],
         private readonly array $categoryTariffs = [],
@@ -49,8 +52,10 @@ final class Merchant
             throw new InvalidArgumentException(sprintf('Пустое название магазина %s', $id));
         }
         self::assertHttpUrl($url, sprintf('Сайт магазина %s', $id));
-        if ($affiliateLink !== null) {
-            self::assertHttpUrl($affiliateLink, sprintf('Партнёрская ссылка магазина %s', $id));
+        try {
+            $link = is_string($affiliateLink) ? AffiliateLink::fromString($affiliateLink) : $affiliateLink;
+        } catch (InvalidArgumentException) {
+            throw new InvalidArgumentException(sprintf('Партнёрская ссылка магазина %s: ожидался адрес http(s):// без пробелов и управляющих символов', $id));
         }
         if ($logoUrl !== null) {
             self::assertHttpUrl($logoUrl, sprintf('Логотип магазина %s', $id));
@@ -62,6 +67,7 @@ final class Merchant
         }
 
         $this->name = $name;
+        $this->link = $link;
         $this->description = self::normalizeLineEndings($description);
         $this->conditions = self::normalizeLineEndings($conditions);
         $this->commissionSummary = self::nullIfBlank($commissionSummary);
@@ -138,7 +144,17 @@ final class Merchant
 
     public function affiliateLink(): ?string
     {
-        return $this->affiliateLink;
+        return $this->link?->url();
+    }
+
+    public function link(): ?AffiliateLink
+    {
+        return $this->link;
+    }
+
+    public function erid(): ?string
+    {
+        return AdMarking::erid($this->adMarking) ?? $this->link?->erid();
     }
 
     /**

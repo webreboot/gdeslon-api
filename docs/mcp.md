@@ -92,7 +92,7 @@ claude mcp add --transport stdio gdeslon -- php /path/to/project/vendor/bin/gdes
 | Инструмент | Аргументы | Результат |
 |---|---|---|
 | `get_categories` | `category_id`, `depth` 0–5, `name_contains`, `limit` (100, до 500), `offset` | `{categories, breadcrumbs, total, limit, offset, next_offset}`. Без аргументов — корневые категории; с `category_id` — категория, путь и подкатегории на `depth` уровней (по умолчанию 1) |
-| `list_merchants` | `search`, `domain`, `merchant_category_id`, `limit` (20, до 100), `offset` | `{merchants, skipped, total, …}`, короткая форма магазина: `id, name, domain, url, commission_summary, categories, affiliate_link, ad_marking` |
+| `list_merchants` | `search`, `domain`, `merchant_category_id`, `limit` (20, до 100), `offset` | `{merchants, skipped, total, …}`, короткая форма магазина: `id, name, domain, url, commission_summary, categories, affiliate_link, ad_marking, erid` |
 | `get_merchant` | `merchant_id` | `{merchant}` — полная форма |
 | `list_merchant_categories` | — | `{categories: [{id, name}]}` |
 | `search_offers` | `query`, `merchant_ids`, `exclude_merchant_ids`, `category_ids`, `exclude_category_ids`, `include_subcategories` (`false`), `articles`, `limit` (10, до 100), `page`, `sort` (`price`, `partner_benefit`, `newest`), `parked_domain` | `{query, page, limit, total, next_page, offers, skipped}`. Категория ищется без подкатегорий; с `include_subcategories: true` — вместе с ними (см. ниже) |
@@ -110,6 +110,11 @@ claude mcp add --transport stdio gdeslon -- php /path/to/project/vendor/bin/gdes
 неизвестный ID — `[not_found] Категории N нет`. Без списков категорий флаг ничего не делает. Длина запроса ограничена
 сервером (~8 КиБ): самый большой раздел (1113 «Одежда», 516 ID) проходит, несколько крупных разделов вместе с длинным
 `query` — нет (`[failed]` с HTTP 414 и подсказкой сократить списки).
+
+У офферов, магазинов и купонов есть `erid` — идентификатор рекламы из маркировки (`ad_marking`), а если там его нет, из
+партнёрской ссылки; `null` — erid нет ни там, ни там (у оффера erid магазина не подставляется). У оффера — `key`:
+`"<merchant_id>:<article>"` или `null` без артикула. Страницы `search_offers` одного магазина могут повторять офферы —
+склеивайте их по `key`.
 
 Создавать заявки на потерянные заказы через MCP нельзя. Это реальная заявка у рекламодателя, её отправляют командой
 `gdeslon lost-orders submit` в терминале ([docs/cli.md](cli.md)).

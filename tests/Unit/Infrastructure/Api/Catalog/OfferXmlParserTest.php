@@ -264,6 +264,73 @@ final class OfferXmlParserTest extends TestCase
         self::assertNull($offer->vendor());
         self::assertSame('Реклама. Рекламодатель http://aliexpress.com/.', $offer->adMarking());
         self::assertSame('4682.38', $offer->oldPrice()?->amount());
+        self::assertNull($offer->erid());
+        self::assertSame(82012, $offer->link()->merchantId()?->value());
+        self::assertSame('82012:1005006482498878', (string) $offer->key());
+    }
+
+    public function testEridAndKeyFromRealFixture(): void
+    {
+        $offer = self::offer('14367733380732236000');
+
+        self::assertSame('2SDnjcZqvUG', $offer->erid());
+        self::assertSame('2SDnjcZqvUG', $offer->link()->erid());
+        self::assertSame(107054, $offer->link()->merchantId()?->value());
+        self::assertSame('107054:578237', (string) $offer->key());
+        self::assertSame($offer->affiliateLink() . '&sub_id=tg_channel-42', $offer->link()->withSubId('tg_channel-42')->url());
+        self::assertSame('Kra23x72C', self::offer('3377556719066259000')->erid());
+
+        $sameArticle = self::offer('7586175759118006000');
+        self::assertSame('113068:578237', (string) $sameArticle->key());
+        self::assertFalse($sameArticle->key()?->equals($offer->key() ?? throw new \LogicException()));
+
+        foreach ([...self::fixture()->offers(), ...self::edge()->offers()] as $each) {
+            self::assertSame($each->merchantId()->value(), $each->link()->merchantId()?->value(), $each->id());
+            if ($each->erid() !== null && $each->link()->erid() !== null) {
+                self::assertSame($each->link()->erid(), $each->erid(), $each->id());
+            }
+        }
+    }
+
+    public function testOfferWithoutEridAnywhere(): void
+    {
+        $offer = self::edgeOffer('1732069055518743000');
+
+        self::assertNull($offer->erid());
+        self::assertNull($offer->link()->erid());
+        self::assertStringEndsWith('https://www.tutu.ru', (string) $offer->adMarking());
+        self::assertSame('81319:002', (string) $offer->key());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function linksWithWhitespace(): iterable
+    {
+        yield 'пробел в goto' => ['https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&amp;goto=https://x.ru/a b'];
+        yield 'табуляция' => ["https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1\t&amp;erid=2SDnjTEST001"];
+        yield 'перевод строки сущностью' => ['https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&#10;&amp;erid=2SDnjTEST001'];
+    }
+
+    #[DataProvider('linksWithWhitespace')]
+    public function testLinkWithWhitespaceIsSkipped(string $url): void
+    {
+        $xml = sprintf(self::HEAD, '2') . self::offerXml([], ['url' => $url]) . self::VALID . '</offers></yml_catalog>';
+
+        $result = (new OfferXmlParser())->parse($xml, new SearchCriteria());
+
+        self::assertSame(['9'], array_map(static fn (Offer $o): string => $o->id(), $result->offers()));
+        self::assertCount(1, $result->skipped());
+        self::assertStringContainsString('оффер «7»', $result->skipped()[0]);
+        self::assertStringContainsString('ссылка', $result->skipped()[0]);
+        self::assertStringNotContainsString('0a1b2c3d4e', $result->skipped()[0]);
+    }
+
+    public function testLinkWithSpacesAroundIsTrimmed(): void
+    {
+        $offer = self::single(self::offerXml([], ['url' => " \n https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1 \n"]));
+
+        self::assertSame('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1', $offer->affiliateLink());
     }
 
     public function testUnavailableOffer(): void

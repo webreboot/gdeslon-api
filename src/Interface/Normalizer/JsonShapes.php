@@ -47,6 +47,7 @@ final class JsonShapes
         ]],
         'category_tariffs' => ['[]' => ['merchant_category_id' => 'int', 'name' => 'string|null', 'rate_type' => 'string', 'rate' => 'string']],
         'ad_marking' => 'string|null',
+        'erid' => 'string|null',
     ];
 
     public const OFFER = [
@@ -68,6 +69,8 @@ final class JsonShapes
         'model' => 'string|null',
         'product_url' => 'string|null',
         'ad_marking' => 'string|null',
+        'erid' => 'string|null',
+        'key' => 'string|null',
     ];
 
     public const ORDER = [
@@ -130,6 +133,7 @@ final class JsonShapes
         'affiliate_link' => 'string',
         'affiliate_link_with_code' => 'string|null',
         'ad_marking' => 'string|null',
+        'erid' => 'string|null',
     ];
 
     public const MERCHANT_SUMMARY = [
@@ -141,6 +145,7 @@ final class JsonShapes
         'categories' => ['[]' => ['id' => 'int', 'name' => 'string|null']],
         'affiliate_link' => 'string|null',
         'ad_marking' => 'string|null',
+        'erid' => 'string|null',
     ];
 
     private function __construct()

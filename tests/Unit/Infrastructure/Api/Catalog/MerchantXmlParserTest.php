@@ -188,6 +188,37 @@ final class MerchantXmlParserTest extends TestCase
         self::assertSame('0,75% - 69%', $m->commissionSummary());
     }
 
+    public function testLinksAndEridFromFixture(): void
+    {
+        $list = self::fixture();
+
+        $superstep = $list->get(105263);
+        self::assertSame('Kra23dyAk', $superstep->erid());
+        self::assertSame(105263, $superstep->link()?->merchantId()?->value());
+        self::assertSame('https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=Kra23dyAk&mid=105263&sub_id=site', $superstep->link()->withSubId('site')->url());
+
+        self::assertNull($list->get(82012)->erid());
+        self::assertNull($list->get(82012)->link()?->erid());
+
+        self::assertNull($list->get(101124)->link());
+        self::assertSame('Kra2449mN', $list->get(101124)->erid());
+
+        foreach ($list->all() as $merchant) {
+            if ($merchant->link() !== null) {
+                self::assertSame($merchant->id()->value(), $merchant->link()->merchantId()?->value());
+                self::assertSame($merchant->link()->erid(), $merchant->erid(), (string) $merchant->id());
+            }
+        }
+
+        $skipped = (new MerchantXmlParser())->parse(self::shops(
+            '<shop><id>7</id><name>x</name><url>https://x.ru/</url><affiliate-link>https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=&amp;mid=7 &amp;x=1</affiliate-link></shop>'
+            . '<shop><id>8</id><name>y</name><url>https://y.ru/</url></shop>',
+        ))->skipped();
+        self::assertCount(1, $skipped);
+        self::assertStringContainsString('Партнёрская ссылка магазина 7', $skipped[0]);
+        self::assertStringNotContainsString('0a1b2c3d4e', $skipped[0]);
+    }
+
     public function testMerchantWithoutAffiliateLink(): void
     {
         $m = self::fixture()->get(101124);

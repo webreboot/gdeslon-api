@@ -137,6 +137,8 @@ $catalog = $gdeslon->merchants(public: true);   // affiliateLink() у всех n
 
 $shop = $merchants->get(105263);        // MerchantNotFoundException, если ID нет
 $shop->affiliateLink();                 // ?string
+$shop->link()?->withSubId('site');      // ?AffiliateLink, см. «Партнёрская ссылка и sub_id»
+$shop->erid();                          // ?string, см. «Маркировка рекламы и erid»
 $shop->commissionSummary();             // ?string, '10,3%'
 $shop->tariffs();                       // list<Tariff>: rate() — десятичная строка, isPercent()
 $shop->isTrafficTypeAllowed('Cashback'); // ?bool, null — тип не указан
@@ -177,6 +179,9 @@ while (true) {
         $offer->price();          // Money больше нуля, currency() === 'RUB'
         $offer->charge();         // ?Money, вознаграждение; null — API не рассчитало (в ответе 0)
         $offer->affiliateLink();
+        $offer->link()->withSubId('tg_channel-42'); // AffiliateLink с меткой источника
+        $offer->erid();           // ?string, идентификатор рекламы
+        $offer->key();            // ?OfferKey, '107054:578237' — для склейки повторов
         $offer->merchantId();
         $offer->pictureCandidates(); // list<string>: originalPicture → picture → thumbnail
     }
@@ -229,8 +234,75 @@ foreach ($offer->pictureCandidates() as $url) {
 разметка из API, например `<br/>`, — при выводе в HTML экранируйте (`htmlspecialchars()`), а переводы строк
 превращайте в разметку сами. Коды купонов, адреса и атрибуты тарифов не раскодируются.
 
-Адреса (картинки, `productUrl()`, партнёрские ссылки, `logoUrl()`) SDK проверяет только на схему http(s) и хост:
-кавычки, пробелы и `<` в пути возможны. В HTML-атрибуты (`src`, `href`) выводите их тоже через `htmlspecialchars()`.
+Адреса (картинки, `productUrl()`, `logoUrl()`) SDK проверяет только на схему http(s) и хост: кавычки, пробелы и `<`
+в пути возможны. Партнёрские ссылки вдобавок не содержат пробелов и управляющих символов, но кавычки и `<` в них тоже
+возможны. В HTML-атрибуты (`src`, `href`) выводите адреса через `htmlspecialchars()`.
+
+#### Партнёрская ссылка и sub_id
+
+`link()` у оффера, магазина (`?AffiliateLink`, без токена — `null`) и купона (`linkWithCode()` — ссылка с промокодом)
+— партнёрская ссылка как объект. `url()` и `(string)` — байт в байт как в ответе API; `affiliateLink()` возвращает ту
+же строку, что и раньше.
+
+```php
+use Webreboot\GdeSlon\Domain\Shared\SubId;
+
+$url = (string) $offer->link()->withSubId('tg_channel-42');          // …&erid=2SDnjcZqvUG&sub_id=tg_channel-42
+$url = $offer->link()->withSubId('tg')->withSubId('post-7', 2)->url(); // sub_id и sub_id2
+
+SubId::isValid($input);         // bool — проверка метки до вызова
+$offer->link()->subId();        // ?string, sub_id, уже стоящий в ссылке; пустой — null
+$offer->link()->merchantId();   // ?MerchantId из параметра mid
+```
+
+- `withSubId($value, $position = 1)` возвращает новую ссылку: `sub_id` (`sub_id2`…`sub_id5` для позиций 2–5)
+  дописывается в конец query, перед `#`. Если параметр уже есть (в JSON-купонах API встречается `sub_id=None`), он
+  заменяется на месте первого вхождения, повторы удаляются. Остальные байты ссылки не меняются и не перекодируются.
+- Значение — `[A-Za-z0-9_-]{1,64}` (строка или `SubId`), позиция — 1…5, иначе `InvalidArgumentException` без значения
+  в сообщении; исходная ссылка не меняется. Это правило SDK, а не API: ограничения длины и символов `sub_id` в
+  документации нет, и живьём они не подтверждены. Метку другого формата (кириллица, пробелы, длиннее 64 символов)
+  закодируйте (`rawurlencode()`) и допишите к `url()` сами.
+- Ссылку из ответа SDK проверяет при разборе: http(s), хост, без пробелов и управляющих символов. Запись с такой
+  ссылкой (оффер, магазин, купон) попадает в `skipped()`.
+- У купона `withSubId()` токен не скрывает. Для логов и показа берите `masked()` (`/ck/***/`); `var_dump` ссылки тоже
+  маскирует токен.
+
+#### Маркировка рекламы и erid
+
+`erid()` у оффера, магазина и купона — идентификатор рекламы (erid): из маркировки `adMarking()` (значение после
+слова `erid` через пробел или двоеточие, последнее вхождение), а если там его нет, из параметра `erid` партнёрской
+ссылки. `null` означает, что erid нет ни там, ни там: так у AliExpress и у части
+офферов, чья маркировка — «Рекламодатель …, ИНН …, сайт» без erid, хотя у их магазина erid есть. SDK не подставляет
+erid магазина в оффер: можно ли публиковать такой оффер, решаете вы.
+
+```php
+$offer->erid();    // ?string, '2SDnjcZqvUG'
+$shop->erid();     // магазин без партнёрской ссылки — erid из маркировки
+$coupon->erid();
+```
+
+#### Повторы между страницами
+
+Соседние страницы поиска одного магазина пересекаются: оффер с прошлой страницы может прийти снова. Склеивайте
+повторы по `key()` — `?OfferKey` из ID магазина и артикула (`"107054:578237"`, `null` без артикула): уникальность
+`id()` API не гарантирует, а один артикул у разных магазинов даёт разные ключи.
+
+```php
+use Webreboot\GdeSlon\Domain\Catalog\OfferKey;
+
+$offers = [];
+foreach ($page as $offer) {
+    $offers[(string) ($offer->key() ?? $offer->id())] ??= $offer;   // первое вхождение побеждает
+}
+
+$saved = OfferKey::fromString('107054:578237');   // ключ из своего хранилища
+$saved->merchantId();                             // MerchantId
+$saved->article();                                // '578237'
+$offer->key()?->equals($saved);                   // ?bool, null — у оффера нет артикула
+```
+
+Артикул в ключе — как в ответе API, с кириллицей и пробелами, поэтому ключ не годится как имя файла или часть URL без
+кодирования (`rawurlencode()` или хэш).
 
 ### Заказы
 
@@ -442,7 +514,9 @@ foreach ($coupons->activeAt(new DateTimeImmutable()) as $coupon) {
     $coupon->kind()->name();
     $coupon->endsAt();                   // DateTimeImmutable, Europe/Moscow
     $coupon->affiliateLinkWithCode() ?? $coupon->affiliateLink();
-    $coupon->adMarking();                // маркировка рекламы (erid)
+    ($coupon->linkWithCode() ?? $coupon->link())->withSubId('site'); // AffiliateLink с sub_id
+    $coupon->adMarking();                // маркировка рекламы
+    $coupon->erid();                     // ?string, erid из маркировки или ссылки
 }
 $coupons->kinds();
 $coupons->skipped();
@@ -451,7 +525,7 @@ $coupons->skipped();
 - **API встраивает токен XML API в партнёрскую ссылку купона** (`http://xf.gdeslon.ru/ck/<токен>/<id>`). Публикация
   ссылки раскрывает токен, которым читаются магазины и создаются заявки. SDK ссылки не переписывает (сломается
   атрибуция) и купоны не кэширует. `var_dump` маскирует токен, но `serialize()`, `var_export()` и JSON содержат его
-  в открытом виде.
+  в открытом виде. Для логов и показа — `$coupon->link()->masked()` (`/ck/***/`), в том числе после `withSubId()`.
 - `adMarking()` есть только в XML-выгрузке; при публикации купона как рекламы маркировка обязательна.
 - Магазин, не подключённый вебмастеру, в фильтре — `CouponCriteriaRejectedException` (`errors()`).
 - Название, описание, инструкция, маркировка, вид и имена в справочниках — plain text (см. [Тексты](#тексты));

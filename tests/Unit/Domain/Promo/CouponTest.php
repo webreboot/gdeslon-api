@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Webreboot\GdeSlon\Tests\Unit\Domain\Promo;
 
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryId;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Promo\Coupon;
@@ -126,6 +127,63 @@ final class CouponTest extends TestCase
         self::assertTrue($coupon->hasEndedAt($after));
     }
 
+    public function testLinksAndErid(): void
+    {
+        $coupon = self::coupon();
+
+        self::assertSame(self::LINK, $coupon->link()->url());
+        self::assertSame(self::LINK_WITH_CODE, $coupon->linkWithCode()?->url());
+        self::assertSame('2SDnjTEST001', $coupon->erid());
+        self::assertSame('2SDnjTEST001', self::coupon(adMarking: null)->erid());
+        self::assertSame('2SDnjMARK01', self::coupon(adMarking: 'Реклама. ООО "Пример". erid 2SDnjMARK01')->erid());
+        self::assertSame('2SDnjTEST001', self::coupon(adMarking: 'Реклама. ООО Eridanus ИНН 7700000000, https://eridanus.ru/.')->erid());
+        self::assertNull(self::coupon(link: 'http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/336004', adMarking: null)->erid());
+
+        $link = AffiliateLink::fromString(self::LINK);
+        $withCode = AffiliateLink::fromString(self::LINK_WITH_CODE);
+        $fromLinks = new Coupon(1, 99157, 'x', new CouponKind(1, 'скидка'), new \DateTimeImmutable('2026-01-01'), new \DateTimeImmutable('2026-12-31'), $link, code: 'PROMO10', affiliateLinkWithCode: $withCode);
+        self::assertSame($link, $fromLinks->link());
+        self::assertSame($withCode, $fromLinks->linkWithCode());
+        self::assertSame(self::LINK, $fromLinks->affiliateLink());
+        self::assertSame(self::LINK_WITH_CODE, $fromLinks->affiliateLinkWithCode());
+    }
+
+    public function testLinkWithCodeNullWithoutCode(): void
+    {
+        foreach (['', '  ', null] as $code) {
+            self::assertNull(self::coupon(code: $code)->linkWithCode());
+        }
+    }
+
+    public function testInvalidLinkMessageHasNoToken(): void
+    {
+        foreach ([
+            static fn () => self::coupon(link: 'http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/336004?kc=A B'),
+            static fn () => self::coupon(linkWithCode: "http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/336004?kc=A\n&erid=x"),
+        ] as $create) {
+            try {
+                $create();
+                self::fail('Ожидалось исключение');
+            } catch (InvalidArgumentException $e) {
+                self::assertStringContainsString('Купон 336004', $e->getMessage());
+                self::assertStringNotContainsString('0a1b2c3d4e', $e->getMessage());
+            }
+        }
+    }
+
+    public function testSubIdOnCouponLinkStaysMasked(): void
+    {
+        $tagged = self::coupon()->link()->withSubId('site');
+
+        self::assertSame('http://xf.gdeslon.ru/ck/***/336004?erid=2SDnjTEST001&sub_id=site', $tagged->masked());
+        self::assertSame(self::LINK . '&sub_id=site', $tagged->url());
+
+        ob_start();
+        var_dump($tagged);
+        $dump = (string) ob_get_clean() . print_r($tagged, true);
+        self::assertStringNotContainsString('0a1b2c3d4e0a1b2c3d4e', $dump);
+    }
+
     public function testTokenInLinksIsHiddenFromDumps(): void
     {
         $coupon = self::coupon();
@@ -191,6 +249,8 @@ final class CouponTest extends TestCase
         string $link = self::LINK,
         string $starts = '2023-04-12 00:00:00',
         string $ends = '2026-12-31 23:59:59',
+        ?string $adMarking = 'Реклама. Рекламодатель ООО "Пример 1" ИНН 7700000001. erid 2SDnjTEST001',
+        string $linkWithCode = self::LINK_WITH_CODE,
     ): Coupon {
         $moscow = new \DateTimeZone('Europe/Moscow');
 
@@ -207,8 +267,8 @@ final class CouponTest extends TestCase
             instruction: 'Ввести код при оформлении',
             code: $code,
             categories: [new CouponCategory(351, 'Питание')],
-            affiliateLinkWithCode: str_replace('336004', (string) $id, self::LINK_WITH_CODE),
-            adMarking: 'Реклама. Рекламодатель ООО "Пример 1" ИНН 7700000001. erid 2SDnjTEST001',
+            affiliateLinkWithCode: str_replace('336004', (string) $id, $linkWithCode),
+            adMarking: $adMarking,
         );
     }
 }

@@ -200,7 +200,8 @@ string, `description` string, `conditions` string, `logo_url` ?string, `country`
 `commission_summary` ?string, `categories` [{`id` int, `name` ?string}], `affiliate_link` ?string (без токена —
 `null`), `traffic_types` [{`name` string, `allowed` bool}], `tariffs` [{`id` string, `title` ?string, `rate_type`
 `percent|fixed`, `rate` string, `traffic_categories` [string], `product_categories` [string]}], `category_tariffs`
-[{`merchant_category_id` int, `name` ?string, `rate_type` `percent|fixed`, `rate` string}], `ad_marking` ?string.
+[{`merchant_category_id` int, `name` ?string, `rate_type` `percent|fixed`, `rate` string}], `ad_marking` ?string,
+`erid` ?string (идентификатор рекламы из маркировки, иначе из партнёрской ссылки; `null` — erid нет ни там, ни там).
 
 **Поиск** (корень `search`): `query` ?string, `page` int, `limit` int, `total` ?int, `next_page` ?int (номер
 следующей страницы для `--page`), `offers` [оффер], `skipped` [string].
@@ -208,8 +209,10 @@ string, `description` string, `conditions` string, `logo_url` ?string, `country`
 **Оффер** (`offers[]`): `id` string, `merchant_id` int, `name` string, `price` money (больше нуля), `old_price` ?money,
 `charge` ?money (вознаграждение; `null` — API не рассчитало, в ответе `0`), `affiliate_link` string, `article` ?string,
 `category_id` ?int, `available` bool, `picture`, `thumbnail`, `original_picture`, `description`, `vendor`, `model`,
-`product_url`, `ad_marking` — ?string. Адреса `picture`, `thumbnail`, `original_picture`, `product_url` — только
-http(s), иначе `null`; так же `logo_url` магазина.
+`product_url`, `ad_marking` — ?string, `erid` ?string (как у магазина; erid магазина не подставляется), `key` ?string
+(`"<merchant_id>:<article>"`, `null` без артикула — ключ для склейки повторов между страницами; артикул бывает с
+кириллицей и пробелами, поэтому как имя файла или часть URL — только после кодирования). Адреса `picture`,
+`thumbnail`, `original_picture`, `product_url` — только http(s), иначе `null`; так же `logo_url` магазина.
 
 **Заказ** (`orders[]`): `id` string, `merchant_id` int, `merchant_name` ?string, `state` string, `type` string,
 `reward` money, `amount` ?money (у лида — `null`), `merchant_order_number` ?string, `sub_id` ?string, `affiliate_id`
@@ -227,7 +230,8 @@ http(s), иначе `null`; так же `logo_url` магазина.
 **Купон** (`coupons[]`, `coupon`): `id` int, `merchant_id` int, `merchant_name` ?string, `name` string, `description`
 string, `instruction` ?string, `code` ?string (акция без промокода — `null`), `kind` {`id` ?int, `name` string},
 `categories` [{`id` int, `name` ?string}], `starts_at` string, `ends_at` string (моменты), `affiliate_link` string,
-`affiliate_link_with_code` ?string, `ad_marking` ?string. Вид купона (`kinds[]`) — {`id` ?int, `name` string}.
+`affiliate_link_with_code` ?string, `ad_marking` ?string, `erid` ?string (как у магазина). Вид купона (`kinds[]`) —
+{`id` ?int, `name` string}.
 
 ## Коды выхода
 

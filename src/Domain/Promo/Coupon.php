@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Domain\Promo;
 
+use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
-use Webreboot\GdeSlon\Domain\Shared\HttpUrl;
+use Webreboot\GdeSlon\Domain\Shared\AdMarking;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class Coupon
@@ -25,7 +26,9 @@ final class Coupon
     /** @var list<CouponCategory> */
     private readonly array $categories;
 
-    private readonly ?string $affiliateLinkWithCode;
+    private readonly AffiliateLink $affiliateLink;
+
+    private readonly ?AffiliateLink $affiliateLinkWithCode;
 
     private readonly ?string $merchantName;
 
@@ -41,13 +44,15 @@ final class Coupon
         private readonly CouponKind $kind,
         private readonly \DateTimeImmutable $startsAt,
         private readonly \DateTimeImmutable $endsAt,
-        private readonly string $affiliateLink,
+        #[\SensitiveParameter]
+        string|AffiliateLink $affiliateLink,
         ?string $merchantName = null,
         string $description = '',
         ?string $instruction = null,
         ?string $code = null,
         array $categories = [],
-        ?string $affiliateLinkWithCode = null,
+        #[\SensitiveParameter]
+        string|AffiliateLink|null $affiliateLinkWithCode = null,
         ?string $adMarking = null,
     ) {
         $this->id = is_int($id) ? new CouponId($id) : $id;
@@ -60,7 +65,7 @@ final class Coupon
         if ($startsAt > $endsAt) {
             throw new InvalidArgumentException(sprintf('Купон %s: начало действия позже окончания', $this->id));
         }
-        self::assertLink($affiliateLink, $this->id);
+        $this->affiliateLink = self::toLink($affiliateLink, $this->id);
 
         $this->name = $name;
         $this->description = self::text($description) ?? '';
@@ -68,12 +73,9 @@ final class Coupon
         $code = $code === null ? '' : trim($code);
         $this->code = $code === '' ? null : $code;
         $this->categories = $categories;
-        if ($this->code !== null && $affiliateLinkWithCode !== null && trim($affiliateLinkWithCode) !== '') {
-            self::assertLink($affiliateLinkWithCode, $this->id);
-            $this->affiliateLinkWithCode = $affiliateLinkWithCode;
-        } else {
-            $this->affiliateLinkWithCode = null;
-        }
+        $this->affiliateLinkWithCode = $this->code === null || $affiliateLinkWithCode === null || (is_string($affiliateLinkWithCode) && trim($affiliateLinkWithCode) === '')
+            ? null
+            : self::toLink($affiliateLinkWithCode, $this->id);
         $this->merchantName = self::text($merchantName);
         $this->adMarking = self::text($adMarking);
     }
@@ -143,10 +145,20 @@ final class Coupon
 
     public function affiliateLink(): string
     {
-        return $this->affiliateLink;
+        return $this->affiliateLink->url();
     }
 
     public function affiliateLinkWithCode(): ?string
+    {
+        return $this->affiliateLinkWithCode?->url();
+    }
+
+    public function link(): AffiliateLink
+    {
+        return $this->affiliateLink;
+    }
+
+    public function linkWithCode(): ?AffiliateLink
     {
         return $this->affiliateLinkWithCode;
     }
@@ -154,6 +166,11 @@ final class Coupon
     public function adMarking(): ?string
     {
         return $this->adMarking;
+    }
+
+    public function erid(): ?string
+    {
+        return AdMarking::erid($this->adMarking) ?? $this->affiliateLink->erid();
     }
 
     public function hasStartedAt(\DateTimeInterface $moment): bool
@@ -177,24 +194,22 @@ final class Coupon
     public function __debugInfo(): array
     {
         $values = get_object_vars($this);
-        $values['affiliateLink'] = self::maskLink($this->affiliateLink);
-        $values['affiliateLinkWithCode'] = $this->affiliateLinkWithCode === null ? null : self::maskLink($this->affiliateLinkWithCode);
+        $values['affiliateLink'] = $this->affiliateLink->masked();
+        $values['affiliateLinkWithCode'] = $this->affiliateLinkWithCode?->masked();
 
         return $values;
     }
 
-    /**
-     * @internal
-     */
-    public static function maskLink(string $link): string
+    private static function toLink(#[\SensitiveParameter] string|AffiliateLink $link, CouponId $id): AffiliateLink
     {
-        return (string) preg_replace('~/ck/[^/?#]+/~', '/ck/***/', $link);
-    }
+        if ($link instanceof AffiliateLink) {
+            return $link;
+        }
 
-    private static function assertLink(string $link, CouponId $id): void
-    {
-        if (!HttpUrl::isValid($link)) {
-            throw new InvalidArgumentException(sprintf('Купон %s: партнёрская ссылка должна начинаться с http(s)://', $id));
+        try {
+            return AffiliateLink::fromString($link);
+        } catch (InvalidArgumentException) {
+            throw new InvalidArgumentException(sprintf('Купон %s: партнёрская ссылка должна начинаться с http(s):// и быть без пробелов и управляющих символов', $id));
         }
     }
 

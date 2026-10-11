@@ -12,7 +12,6 @@ use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimState;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderCriteria;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderStatus;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
-use Webreboot\GdeSlon\Domain\Promo\Coupon;
 use Webreboot\GdeSlon\Domain\Promo\CouponCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
@@ -63,8 +62,15 @@ final class NormalizerTest extends TestCase
         self::assertSame(['merchants', 'skipped'], array_keys($data));
         $merchant = $data['merchants'][0];
         self::assertSame(['id', 'name', 'url', 'domain', 'short_description', 'description', 'conditions', 'logo_url', 'country', 'kind', 'green',
-            'commission_summary', 'categories', 'affiliate_link', 'traffic_types', 'tariffs', 'category_tariffs', 'ad_marking'], array_keys($merchant));
+            'commission_summary', 'categories', 'affiliate_link', 'traffic_types', 'tariffs', 'category_tariffs', 'ad_marking', 'erid'], array_keys($merchant));
         self::assertIsString($merchant['affiliate_link']);
+        self::assertSame('Kra23dyAk', $merchant['erid']);
+        self::assertNull(CatalogNormalizer::merchant($list->get(82012))['erid']);
+        self::assertSame('Kra2449mN', CatalogNormalizer::merchant($list->get(101124))['erid']);
+
+        $summary = CatalogNormalizer::merchantSummary($list->get(105263));
+        self::assertSame(['id', 'name', 'domain', 'url', 'commission_summary', 'categories', 'affiliate_link', 'ad_marking', 'erid'], array_keys($summary));
+        self::assertSame('Kra23dyAk', $summary['erid']);
 
         $public = CatalogNormalizer::merchantList((new MerchantXmlParser())->parse(Fixtures::read('merchants/shops-public.xml')));
         self::assertNull($public['merchants'][0]['affiliate_link']);
@@ -84,11 +90,16 @@ final class NormalizerTest extends TestCase
         self::assertCount(7, $offers);
         self::assertIsArray($offers[0]);
         self::assertSame(['id', 'merchant_id', 'name', 'price', 'old_price', 'charge', 'affiliate_link', 'article', 'category_id', 'available', 'picture',
-            'thumbnail', 'original_picture', 'description', 'vendor', 'model', 'product_url', 'ad_marking'], array_keys($offers[0]));
+            'thumbnail', 'original_picture', 'description', 'vendor', 'model', 'product_url', 'ad_marking', 'erid', 'key'], array_keys($offers[0]));
         self::assertSame(['amount' => '100', 'currency' => 'RUB'], $offers[0]['price']);
         self::assertSame(['amount' => '3.64', 'currency' => 'RUB'], $offers[0]['charge']);
+        self::assertSame('2SDnjcZqvUG', $offers[0]['erid']);
+        self::assertSame('107054:578237', $offers[0]['key']);
         self::assertIsArray($offers[2]);
         self::assertNull($offers[2]['charge']);
+        self::assertIsArray($offers[3]);
+        self::assertNull($offers[3]['erid']);
+        self::assertSame('82012:1005006482498878', $offers[3]['key']);
         self::assertIsArray($data['skipped']);
         self::assertCount(1, $data['skipped']);
         self::assertIsString($data['skipped'][0]);
@@ -150,6 +161,8 @@ final class NormalizerTest extends TestCase
         self::assertSame(['id' => 1, 'name' => 'скидка на заказ'], $coupon['kind']);
         self::assertSame('2026-12-31T23:59:59+03:00', $coupon['ends_at']);
         self::assertSame('PROMO10', $coupon['code']);
+        self::assertSame('2SDnjTEST001', $coupon['erid']);
+        self::assertSame('erid', array_key_last($coupon));
 
         $withoutCode = (new PromoNormalizer())->coupon($list->find(400636) ?? throw new \LogicException());
         self::assertNull($withoutCode['code']);
@@ -158,7 +171,6 @@ final class NormalizerTest extends TestCase
         $revealed = (new PromoNormalizer(revealLinks: true))->coupon($list->find(336004) ?? throw new \LogicException());
         self::assertIsString($revealed['affiliate_link']);
         self::assertStringContainsString('/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/', $revealed['affiliate_link']);
-        self::assertSame('http://xf.gdeslon.ru/ck/***/1?kc=X', Coupon::maskLink('http://xf.gdeslon.ru/ck/abc/1?kc=X'));
     }
 
     public function testEveryEnumCaseHasJsonValue(): void

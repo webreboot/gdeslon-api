@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Webreboot\GdeSlon\Domain\Sales;
 
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
+use Webreboot\GdeSlon\Domain\Shared\SubId;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
 final class Conversion
 {
-    public const MAX_SUB_IDS = 5;
+    public const MAX_SUB_IDS = SubId::MAX_POSITION;
 
     private readonly MerchantId $merchantId;
 

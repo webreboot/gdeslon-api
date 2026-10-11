@@ -60,6 +60,43 @@ final class CouponXmlParserTest extends TestCase
         self::assertStringContainsString("\n", $list->find(441966)?->description() ?? '', 'перевод строки в описании сохраняется');
     }
 
+    public function testEridAndLinks(): void
+    {
+        $list = self::parse('coupons.xml');
+
+        $coupon = $list->find(336004) ?? throw new \LogicException();
+        self::assertSame('2SDnjTEST001', $coupon->erid());
+        self::assertSame($coupon->affiliateLink(), $coupon->link()->url());
+        self::assertSame($coupon->affiliateLinkWithCode(), $coupon->linkWithCode()?->url());
+        self::assertSame('2SDnjTEST001', $coupon->linkWithCode()?->erid());
+        self::assertSame('http://xf.gdeslon.ru/ck/***/336004?erid=2SDnjTEST001&sub_id=site', $coupon->link()->withSubId('site')->masked());
+        self::assertStringContainsString('kc=PROMO20%0A&erid=2SDnjTEST002', (string) $list->find(403066)?->linkWithCode()?->url());
+
+        foreach ($list->all() as $each) {
+            self::assertNotNull($each->erid(), (string) $each->id());
+            self::assertSame($each->link()->erid(), $each->erid(), (string) $each->id());
+        }
+    }
+
+    public function testLinkWithWhitespaceIsSkippedWithoutToken(): void
+    {
+        $link = 'http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/500001?kc=A B&amp;erid=2SDnjTEST900';
+        $list = self::parseXml(self::document(
+            self::coupon(['url' => $link])
+            . self::coupon(['id' => '500002', 'code' => 'A', 'url-with-code' => "http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/500002?kc=A&#10;&amp;erid=x"])
+            . self::coupon(['id' => '500003', 'url' => " \n http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/500003?erid=2SDnjTEST900 \n"]),
+        ));
+
+        self::assertSame([500003], array_map(static fn (Coupon $c): int => $c->id()->value(), $list->all()));
+        self::assertSame('http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/500003?erid=2SDnjTEST900', $list->find(500003)?->affiliateLink());
+        self::assertCount(2, $list->skipped());
+        foreach ($list->skipped() as $i => $reason) {
+            self::assertStringContainsString(sprintf('купон 50000%d', $i + 1), $reason);
+            self::assertStringContainsString('ссылка', $reason);
+            self::assertStringNotContainsString('0a1b2c3d4e', $reason);
+        }
+    }
+
     public function testKinds(): void
     {
         $list = self::parse('coupons.xml');

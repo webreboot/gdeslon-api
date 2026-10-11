@@ -7,16 +7,19 @@ namespace Webreboot\GdeSlon\Tests\Unit;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimList;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
+use Webreboot\GdeSlon\Domain\Promo\Coupon;
 use Webreboot\GdeSlon\Domain\Sales\Conversion;
 use Webreboot\GdeSlon\Domain\Sales\Order;
 use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderList;
 use Webreboot\GdeSlon\Domain\Shared\Money;
+use Webreboot\GdeSlon\Domain\Shared\SubId;
 use Webreboot\GdeSlon\Infrastructure\Claims\AttachmentFile;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlErrorMapper;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
@@ -86,6 +89,12 @@ final class SensitiveParameterCoverageTest extends TestCase
         yield 'Environment::__construct $env' => [Environment::class, '__construct', 'env'];
         yield 'Environment::__construct $file' => [Environment::class, '__construct', 'file'];
         yield 'HeaderSecret::__construct $header' => [HeaderSecret::class, '__construct', 'header'];
+        yield 'AffiliateLink::fromString $url' => [AffiliateLink::class, 'fromString', 'url'];
+        yield 'AffiliateLink::withSubId $subId' => [AffiliateLink::class, 'withSubId', 'subId'];
+        foreach (['affiliateLink', 'affiliateLinkWithCode'] as $name) {
+            yield "Coupon::__construct \${$name}" => [Coupon::class, '__construct', $name];
+        }
+        yield 'Coupon::toLink $link' => [Coupon::class, 'toLink', 'link'];
     }
 
     /**
@@ -129,6 +138,8 @@ final class SensitiveParameterCoverageTest extends TestCase
         foreach (['plus', 'compare', 'isGreaterThan', 'isLessThan'] as $method) {
             yield "Money::{$method} \$other" => [Money::class, $method, 'other'];
         }
+        yield 'SubId::__construct $value' => [SubId::class, '__construct', 'value'];
+        yield 'SubId::isValid $value' => [SubId::class, 'isValid', 'value'];
     }
 
     /**

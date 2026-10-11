@@ -81,6 +81,7 @@ final class CatalogNormalizer
                 'rate' => $tariff->rate(),
             ], $merchant->categoryTariffs()),
             'ad_marking' => $merchant->adMarking(),
+            'erid' => $merchant->erid(),
         ];
     }
 
@@ -98,6 +99,7 @@ final class CatalogNormalizer
             'categories' => array_map(self::merchantCategory(...), $merchant->categories()),
             'affiliate_link' => $merchant->affiliateLink(),
             'ad_marking' => $merchant->adMarking(),
+            'erid' => $merchant->erid(),
         ];
     }
 
@@ -141,6 +143,8 @@ final class CatalogNormalizer
             'model' => $offer->model(),
             'product_url' => $offer->productUrl(),
             'ad_marking' => $offer->adMarking(),
+            'erid' => $offer->erid(),
+            'key' => $offer->key()?->__toString(),
         ];
     }
 

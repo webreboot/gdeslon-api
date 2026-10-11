@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Interface\Cli\Command;
 
-use Webreboot\GdeSlon\Domain\Promo\Coupon;
+use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Promo\CouponCategory;
 use Webreboot\GdeSlon\Interface\Cli\CommandContext;
 use Webreboot\GdeSlon\Interface\Cli\Credentials;
@@ -60,7 +60,7 @@ final class CouponShowCommand extends BaseCommand
 
             return ExitCode::OK;
         }
-        $link = static fn (?string $link): ?string => $link === null || $reveal ? $link : Coupon::maskLink($link);
+        $link = static fn (?AffiliateLink $link): ?string => $reveal ? $link?->url() : $link?->masked();
         $context->text(Details::render([
             ['ID', (string) $coupon->id()->value()],
             ['Магазин', trim(sprintf('%d %s', $coupon->merchantId()->value(), $coupon->merchantName() ?? ''))],
@@ -71,8 +71,8 @@ final class CouponShowCommand extends BaseCommand
             ['Действует (МСК)', sprintf('%s — %s', CommandContext::moscow($coupon->startsAt()), CommandContext::moscow($coupon->endsAt()))],
             ['Описание', $coupon->description()],
             ['Как применить', $coupon->instruction()],
-            ['Ссылка', $link($coupon->affiliateLink())],
-            ['Ссылка с промокодом', $link($coupon->affiliateLinkWithCode())],
+            ['Ссылка', $link($coupon->link())],
+            ['Ссылка с промокодом', $link($coupon->linkWithCode())],
             ['Маркировка рекламы', $coupon->adMarking()],
         ]));
 

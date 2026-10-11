@@ -125,13 +125,13 @@ final class CouponXmlParser
                 kind: $kind,
                 startsAt: self::date($coupon, 'start-at'),
                 endsAt: self::date($coupon, 'finish-at'),
-                affiliateLink: self::text($coupon, 'url') ?? throw new UnexpectedResponseException('url: нет партнёрской ссылки'),
+                affiliateLink: self::link($coupon, 'url') ?? throw new UnexpectedResponseException('url: нет партнёрской ссылки'),
                 merchantName: $merchants[$merchantId] ?? null,
                 description: (string) SimpleXml::decodedText($coupon, 'description'),
                 instruction: SimpleXml::decodedText($coupon, 'instruction'),
                 code: self::text($coupon, 'code'),
                 categories: $couponCategories,
-                affiliateLinkWithCode: self::text($coupon, 'url-with-code'),
+                affiliateLinkWithCode: self::link($coupon, 'url-with-code'),
                 adMarking: SimpleXml::decodedText($coupon, 'tagging_ads'),
             );
         } catch (UnexpectedResponseException | InvalidArgumentException $e) {
@@ -180,6 +180,13 @@ final class CouponXmlParser
         $child = SimpleXml::child($element, $name);
 
         return $child === null ? null : (string) $child;
+    }
+
+    private static function link(\SimpleXMLElement $element, string $name): ?string
+    {
+        $text = self::text($element, $name);
+
+        return $text === null ? null : trim($text);
     }
 
     private static function required(\SimpleXMLElement $element, string $name): string
