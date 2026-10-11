@@ -258,6 +258,33 @@ Currency::normalize('РУБ');     // InvalidArgumentException: не три ла
 
 `new Money()` код не нормализует и принимает только три заглавные латинские буквы.
 
+#### Суммы
+
+`Money` складывает и сравнивает суммы одной валюты точно, без `float` и `bcmath`, при любой длине числа:
+
+```php
+use Webreboot\GdeSlon\Domain\Shared\Money;
+
+$total = new Money('0', 'RUB');
+foreach ($orders as $order) {
+    $total = $total->plus($order->reward());   // новый Money, операнды не меняются
+}
+
+(new Money('1.50', 'RUB'))->plus(new Money('2.5', 'RUB'));      // 4.00 RUB
+(new Money('10', 'RUB'))->compare(new Money('9.99', 'RUB'));    // 1 (-1, 0 или 1)
+$offer->oldPrice()?->isGreaterThan($offer->price());             // есть скидка
+usort($offers, fn (Offer $a, Offer $b) => $a->price()->compare($b->price()));
+```
+
+- Округления нет: в сумме столько знаков дроби, сколько у более длинного слагаемого (`'100' + '0.00'` → `'100.00'`,
+  `'0.0000000001' + '0.9999999999'` → `'1.0000000000'`); ведущие нули целой части убираются (`'007' + '1'` → `'8'`).
+  Округляйте до копеек сами при выводе.
+- Сравнивается значение, а не запись: `'100'` и `'100.00'` равны.
+- `plus()`, `compare()`, `isGreaterThan()`, `isLessThan()` для разных валют бросают `InvalidArgumentException`
+  (в сообщении только коды валют), а `equals()` возвращает `false`. Поэтому `equals()` и `compare() === 0` совпадают
+  только для одной валюты. Нормализуйте коды из своих данных через `Currency::normalize()`, иначе `RUR` и `RUB` —
+  разные валюты.
+
 ### Postback
 
 «Где Слон?» вызывает URL вебмастера при смене статуса заказа (настройка — https://gdeslon.ru/postbacks/).

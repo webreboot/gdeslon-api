@@ -16,6 +16,7 @@ use Webreboot\GdeSlon\Domain\Sales\Conversion;
 use Webreboot\GdeSlon\Domain\Sales\Order;
 use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderList;
+use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Infrastructure\Claims\AttachmentFile;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlErrorMapper;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
@@ -124,6 +125,9 @@ final class SensitiveParameterCoverageTest extends TestCase
         yield 'Conversion::normalizeSubIds $subIds' => [Conversion::class, 'normalizeSubIds', 'subIds'];
         foreach (['orderNumber', 'orderDate', 'orderTotal', 'description', 'attachmentUrl'] as $name) {
             yield "LostOrderClaim::__construct \${$name}" => [LostOrderClaim::class, '__construct', $name];
+        }
+        foreach (['plus', 'compare', 'isGreaterThan', 'isLessThan'] as $method) {
+            yield "Money::{$method} \$other" => [Money::class, $method, 'other'];
         }
     }
 

@@ -30,12 +30,50 @@ final class Money
 
     public function isZero(): bool
     {
-        return $this->normalized() === '0';
+        return Decimal::normalize($this->amount) === '0';
     }
 
     public function equals(self $other): bool
     {
-        return $this->currency === $other->currency && $this->normalized() === $other->normalized();
+        return $this->currency === $other->currency && Decimal::normalize($this->amount) === Decimal::normalize($other->amount);
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function plus(#[\SensitiveParameter] self $other): self
+    {
+        $this->assertSameCurrency($other->currency);
+
+        return new self(Decimal::add($this->amount, $other->amount), $this->currency);
+    }
+
+    /**
+     * @return -1|0|1
+     *
+     * @throws InvalidArgumentException
+     */
+    public function compare(#[\SensitiveParameter] self $other): int
+    {
+        $this->assertSameCurrency($other->currency);
+
+        return Decimal::compare($this->amount, $other->amount);
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function isGreaterThan(#[\SensitiveParameter] self $other): bool
+    {
+        return $this->compare($other) === 1;
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    public function isLessThan(#[\SensitiveParameter] self $other): bool
+    {
+        return $this->compare($other) === -1;
     }
 
     public function __toString(): string
@@ -43,12 +81,10 @@ final class Money
         return $this->amount . ' ' . $this->currency;
     }
 
-    private function normalized(): string
+    private function assertSameCurrency(string $currency): void
     {
-        $parts = explode('.', $this->amount, 2);
-        $integer = ltrim($parts[0], '0');
-        $fraction = rtrim($parts[1] ?? '', '0');
-
-        return ($integer === '' ? '0' : $integer) . ($fraction === '' ? '' : '.' . $fraction);
+        if ($currency !== $this->currency) {
+            throw new InvalidArgumentException(sprintf('Суммы в разных валютах: %s и %s', $this->currency, $currency));
+        }
     }
 }
