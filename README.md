@@ -642,15 +642,77 @@ new Config(rangeChunkSize: null);   // один запрос
 
 ### Собственный транспорт
 
-Точка расширения — `Webreboot\GdeSlon\Infrastructure\Http\HttpTransport::send(HttpRequest): HttpResponse` (прокси,
-логирование, адаптер к PSR-18-клиенту). Передаётся в `GdeSlon::create(transport: $transport)` и используется как
-есть: `timeout`, `userAgent` и `rangeChunkSize` из `Config` к нему не применяются.
+Точка расширения — `Webreboot\GdeSlon\Infrastructure\Http\HttpTransport::send(HttpRequest): HttpResponse`. Свой
+транспорт подключается одним из трёх способов.
+
+**Полная замена** (прокси, адаптер к PSR-18-клиенту): транспорт передаётся в `GdeSlon::create(transport: $transport)`
+и используется как есть — `timeout`, `userAgent` и `rangeChunkSize` из `Config` к нему не применяются, загрузки
+частями нет.
+
+**Декоратор снаружи** видит логические запросы и готовые ответы: после загрузки частями — один собранный `200` на
+запрос. Подходит для записи ответов и логов вызовов API:
+
+```php
+use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
+
+$config = new Config(apiToken: getenv('GDESLON_API_TOKEN') ?: null);
+$gdeslon = GdeSlon::create($config, new RecordingTransport(TransportFactory::fromConfig($config), $dir));
+```
+
+**Декоратор внутри загрузки частями** видит каждую часть: запросы с `Range`, ответы `206`, повторы зависших частей.
+Подходит для метрик соединений:
+
+```php
+use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
+use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
+
+$transport = TransportFactory::fromConfig($config, inner: new MetricsTransport(CurlTransport::fromConfig($config)));
+$gdeslon = GdeSlon::create($config, $transport);
+```
+
+`TransportFactory::fromConfig($config)` собирает тот же транспорт, что и `GdeSlon::create($config)`: cURL с
+`timeout`, `connectTimeout` и `userAgent` из `Config`, обёрнутый в загрузку частями по `rangeChunkSize`. С `inner:`
+вместо cURL оборачивается ваш транспорт, а при `rangeChunkSize: null` он возвращается как есть.
+`$inner` не подгоняется под `Config`: таймауты и User-Agent у него свои — собирайте его из того же `Config`, как в
+примере. Третий параметр `rangeHosts` задаёт хосты загрузки частями (по умолчанию `api.gdeslon.ru`).
+
+Пример декоратора (`RecordingTransport` и `MetricsTransport` выше устроены так же):
+
+```php
+use Psr\Log\LoggerInterface;
+use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
+use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
+use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
+
+final class LoggingTransport implements HttpTransport
+{
+    public function __construct(private readonly HttpTransport $inner, private readonly LoggerInterface $logger)
+    {
+    }
+
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
+    {
+        $started = microtime(true);
+        $response = $this->inner->send($request);
+        $this->logger->info(sprintf('%s %s: HTTP %d, %.2f с', $request->method(), $request->maskedUri(), $response->statusCode(), microtime(true) - $started));
+
+        return $response;
+    }
+}
+```
+
+- В лог пишите только `$request->maskedUri()`: `uri()`, `url()`, `query()`, `headers()` и сам объект запроса содержат
+  токен или ключ.
+- Тела ответов заказов и потерянных заказов, тело запроса подачи заявки — персональные данные покупателей и данные
+  продаж: не сохраняйте их без необходимости и не отправляйте в общие логи.
+- Внутренний декоратор не кэширует по URL: части одного документа различаются только заголовком `Range`, а повтор
+  зависшей части должен уйти в сеть.
 
 Требования к реализации:
 - метод и тело (`HttpRequest::body()`) отправляются байт-в-байт;
 - редиректы не выполняются, TLS проверяется;
-- для обёртки `new RangeTransport($transport)` — соблюдение `HttpRequest::timeout()` и отказ от переиспользования
-  соединения при `Connection: close`;
+- под загрузкой частями (`inner:` или `new RangeTransport($transport)`) — соблюдение `HttpRequest::timeout()` и отказ
+  от переиспользования соединения при `Connection: close`;
 - истечение времени — `TimeoutException`: на нём держится [повтор поиска меньшими страницами](#повтор-меньшими-страницами);
 - параметр запроса помечен атрибутом: в запросе токен или ключ, атрибут с интерфейса не наследуется, а без него на
   PHP 8.2+ запрос попадёт в аргументы трассы исключений транспорта.
@@ -739,7 +801,7 @@ src/
 ## Совместимость
 
 Публичный API — фасад `GdeSlon`, `Config`, доменные объекты, порты, `CacheStore`/`HttpTransport` и их реализации,
-`Interface\Postback`. Классы и методы с `@internal` в него не входят.
+`TransportFactory`, `SystemClock`, `Interface\Postback`. Классы и методы с `@internal` в него не входят.
 
 - Новые параметры конструкторов добавляются только в конец списка; вызывайте конструкторы с именованными
   аргументами.
@@ -754,6 +816,8 @@ composer check   # phpstan level max + PHPUnit
 ```
 
 Тесты не обращаются к сети: адаптеры проверяются на фейковом транспорте и обезличенных фикстурах реальных ответов.
+`phpunit.xml.dist` направляет cURL на прокси-заглушку `127.0.0.1:9` (кроме `127.0.0.1` и `localhost`): случайный
+запрос во внешнюю сеть сразу падает с «Failed to connect».
 Справочник API с проверенными фактами — [docs/gdeslon-api/](docs/gdeslon-api/README.md).
 
 ## Лицензия

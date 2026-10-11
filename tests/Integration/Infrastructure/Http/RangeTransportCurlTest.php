@@ -26,7 +26,7 @@ final class RangeTransportCurlTest extends TestCase
     {
         self::requireSensitiveParameter();
         $token = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
-        $transport = TransportFactory::fromConfig(new Config(apiToken: $token), ['127.0.0.1']);
+        $transport = TransportFactory::fromConfig(new Config(apiToken: $token), rangeHosts: ['127.0.0.1']);
         $catalog = new HttpProductCatalog(new ApiClient($transport), $token, 'http://127.0.0.1:' . LocalHttpServer::freePort() . '/api/search.xml');
 
         $e = self::catchWithTraceArgs(static fn () => $catalog->search(new SearchCriteria(query: 'платье')), TransportException::class);

@@ -6,21 +6,20 @@ namespace Webreboot\GdeSlon\Infrastructure\Http;
 
 use Webreboot\GdeSlon\Config;
 
-/** @internal */
 final class TransportFactory
 {
     /**
      * @param list<string>|null $rangeHosts
      */
-    public static function fromConfig(#[\SensitiveParameter] Config $config, ?array $rangeHosts = null): HttpTransport
+    public static function fromConfig(#[\SensitiveParameter] Config $config, ?HttpTransport $inner = null, ?array $rangeHosts = null): HttpTransport
     {
-        $curl = CurlTransport::fromConfig($config);
+        $transport = $inner ?? CurlTransport::fromConfig($config);
         $chunkSize = $config->rangeChunkSize();
 
         if ($chunkSize === null) {
-            return $curl;
+            return $transport;
         }
 
-        return new RangeTransport($curl, $chunkSize, hosts: $rangeHosts ?? RangeTransport::DEFAULT_HOSTS);
+        return new RangeTransport($transport, $chunkSize, hosts: $rangeHosts ?? RangeTransport::DEFAULT_HOSTS);
     }
 }

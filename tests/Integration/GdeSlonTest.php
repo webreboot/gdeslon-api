@@ -37,6 +37,7 @@ use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
+use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 use Webreboot\GdeSlon\Tests\Support\FakeCategoryRepository;
 use Webreboot\GdeSlon\Tests\Support\FakeCouponFeed;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
@@ -183,6 +184,18 @@ final class GdeSlonTest extends TestCase
         GdeSlon::create(transport: $transport)->categories();
 
         self::assertNull($transport->lastRequest()->header('Range'));
+    }
+
+    public function testFactoryTransportKeepsRangeThroughCreate(): void
+    {
+        $config = new Config();
+        $inner = (new FakeHttpTransport())->willReturn(200, Fixtures::read('categories/categories.json'));
+
+        $tree = GdeSlon::create($config, TransportFactory::fromConfig($config, $inner))->categories();
+
+        self::assertCount(23, $tree);
+        self::assertSame('bytes=0-16383', $inner->lastRequest()->header('Range'));
+        self::assertSame('https://api.gdeslon.ru/gdeslon-categories.json', $inner->lastRequest()->uri());
     }
 
     public function testMerchantsWithToken(): void

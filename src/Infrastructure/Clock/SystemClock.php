@@ -6,7 +6,6 @@ namespace Webreboot\GdeSlon\Infrastructure\Clock;
 
 use Webreboot\GdeSlon\Domain\Shared\Clock;
 
-/** @internal */
 final class SystemClock implements Clock
 {
     public function now(): \DateTimeImmutable

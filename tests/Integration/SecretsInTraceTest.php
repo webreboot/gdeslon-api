@@ -27,6 +27,8 @@ use Webreboot\GdeSlon\Infrastructure\Cache\CacheStore;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
+use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
+use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 use Webreboot\GdeSlon\Interface\Postback\HeaderSecret;
 use Webreboot\GdeSlon\Interface\Postback\PostbackReceiver;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
@@ -83,6 +85,30 @@ final class SecretsInTraceTest extends TestCase
 
         $e = self::catchWithTraceArgs(static fn () => $gdeslon->search('платье'), $expected);
 
+        self::assertTraceHidesSecrets($e, self::TOKEN);
+    }
+
+    public function testOwnDecoratorUnderRangeHidesToken(): void
+    {
+        self::requireSensitiveParameter();
+        $config = new Config(apiToken: self::TOKEN);
+        $decorator = new class ((new FakeHttpTransport())->willFail(7)) implements HttpTransport {
+            public function __construct(private readonly HttpTransport $inner)
+            {
+            }
+
+            public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
+            {
+                return $this->inner->send($request);
+            }
+        };
+        $gdeslon = GdeSlon::create($config, TransportFactory::fromConfig($config, $decorator));
+
+        $e = self::catchWithTraceArgs(static fn () => $gdeslon->search('платье'), TransportException::class);
+
+        $functions = array_map(static fn (array $frame): string => ($frame['class'] ?? '') . '::' . $frame['function'], $e->getTrace());
+        self::assertContains(RangeTransport::class . '::send', $functions);
+        self::assertContains($decorator::class . '::send', $functions);
         self::assertTraceHidesSecrets($e, self::TOKEN);
     }
 

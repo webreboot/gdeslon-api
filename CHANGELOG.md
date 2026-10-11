@@ -48,6 +48,12 @@
 - CLI: флаг `--refresh` у `categories` и `merchants [list]` (сбой — код 1 или 3, копия не тронута); при данных из
   устаревшей копии — предупреждение в stderr, stdout и JSON не меняются. MCP: при устаревшей копии — строка
   `gdeslon mcp: …` в stderr, ответы инструментов не меняются.
+- `TransportFactory` и `SystemClock` — публичный API (сняты `@internal`). `TransportFactory::fromConfig($config,
+  inner: $transport)` оборачивает свой транспорт в загрузку частями по настройкам `Config` — для декоратора, который
+  видит каждую часть (`Range`, `206`, повторы); `TransportFactory::fromConfig($config)` — транспорт, который собирает
+  `GdeSlon::create($config)`, для декоратора снаружи. `$inner` не подгоняется под `Config`, при `rangeChunkSize: null`
+  возвращается как есть; `GdeSlon::create(transport: $transport)` по-прежнему без загрузки частями (см. README,
+  «Собственный транспорт»).
 
 ### Безопасность
 
@@ -117,6 +123,8 @@
   магазин или купон уходит в `skipped()`, а `new Offer()`, `new Merchant()`, `new Coupon()` с такой ссылкой бросают
   `InvalidArgumentException`. В живых ответах таких ссылок не встречалось. Пробелы по краям ссылки купона теперь
   обрезаются, как у офферов и магазинов.
+- `TransportFactory::fromConfig()`: `rangeHosts` теперь третий параметр (вторым стал `inner`). Позиционный вызов
+  `fromConfig($config, ['host'])` даёт `TypeError` — передавайте `rangeHosts:` по имени.
 
 ### Исправлено
 
