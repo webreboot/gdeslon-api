@@ -26,6 +26,7 @@ final class HttpMerchantRepository implements MerchantRepository
 
     public function __construct(
         ApiClient $client,
+        #[\SensitiveParameter]
         private readonly ?string $token = null,
         ?DocumentCache $cache = null,
         private readonly string $url = self::DEFAULT_URL,
@@ -52,7 +53,7 @@ final class HttpMerchantRepository implements MerchantRepository
     public function __sleep(): array
     {
         if ($this->token !== null) {
-            throw new InvalidArgumentException('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
+            throw InvalidArgumentException::withoutTraceArguments('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
         }
 
         return array_keys(get_object_vars($this));
@@ -66,7 +67,7 @@ final class HttpMerchantRepository implements MerchantRepository
         return ['url' => $this->url, 'token' => $this->token === null ? null : '***'];
     }
 
-    private function toList(HttpRequest $request, HttpResponse $response): MerchantList
+    private function toList(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): MerchantList
     {
         $list = $this->parser->parse($response->body());
 

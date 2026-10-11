@@ -76,7 +76,7 @@ final class HttpCouponFeed implements CouponFeed
     public function __sleep(): array
     {
         if ($this->token !== null) {
-            throw new InvalidArgumentException('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
+            throw InvalidArgumentException::withoutTraceArguments('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
         }
 
         return array_keys(get_object_vars($this));

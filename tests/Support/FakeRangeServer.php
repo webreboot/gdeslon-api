@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Webreboot\GdeSlon\Tests\Support;
 
 use Webreboot\GdeSlon\Exception\TransportException;
+use Webreboot\GdeSlon\Infrastructure\Http\CurlErrorMapper;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
@@ -23,7 +24,7 @@ final class FakeRangeServer implements HttpTransport
 
     private bool $honourIfMatch = true;
 
-    /** @var array<int, array{TransportException, int}> */
+    /** @var array<int, array{TransportException|int, int}> */
     private array $failures = [];
 
     /** @var array<int, HttpResponse> */
@@ -52,7 +53,7 @@ final class FakeRangeServer implements HttpTransport
         return $this;
     }
 
-    public function failPart(int $offset, TransportException $exception, int $times = 1): self
+    public function failPart(int $offset, TransportException|int $exception, int $times = 1): self
     {
         $this->failures[$offset] = [$exception, $times];
 
@@ -66,7 +67,7 @@ final class FakeRangeServer implements HttpTransport
         return $this;
     }
 
-    public function send(HttpRequest $request): HttpResponse
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         $this->requests[] = $request;
         $number = count($this->requests);
@@ -80,7 +81,9 @@ final class FakeRangeServer implements HttpTransport
         if ($range !== null && isset($this->failures[$range[0]]) && $this->failures[$range[0]][1] > 0) {
             $this->failures[$range[0]][1]--;
 
-            throw $this->failures[$range[0]][0];
+            $failure = $this->failures[$range[0]][0];
+
+            throw is_int($failure) ? CurlErrorMapper::toException($request, $failure, 'Operation timed out') : $failure;
         }
 
         if (isset($this->overrides[$number])) {

@@ -21,8 +21,11 @@ final class HttpRequest
     public function __construct(
         string $method,
         private readonly string $url,
+        #[\SensitiveParameter]
         private readonly array $query = [],
+        #[\SensitiveParameter]
         private readonly array $headers = [],
+        #[\SensitiveParameter]
         private readonly ?string $body = null,
     ) {
         $this->method = strtoupper($method);
@@ -32,7 +35,7 @@ final class HttpRequest
      * @param array<string, scalar|list<scalar>> $query
      * @param array<string, string>              $headers
      */
-    public static function get(string $url, array $query = [], array $headers = []): self
+    public static function get(string $url, #[\SensitiveParameter] array $query = [], #[\SensitiveParameter] array $headers = []): self
     {
         return new self('GET', $url, $query, $headers);
     }
@@ -40,7 +43,7 @@ final class HttpRequest
     /**
      * @param array<string, string> $headers
      */
-    public static function post(string $url, string $body, array $headers = []): self
+    public static function post(string $url, #[\SensitiveParameter] string $body, #[\SensitiveParameter] array $headers = []): self
     {
         return new self('POST', $url, [], $headers, $body);
     }
@@ -79,7 +82,7 @@ final class HttpRequest
     /**
      * @param array<string, string> $headers
      */
-    public function withHeaders(array $headers): self
+    public function withHeaders(#[\SensitiveParameter] array $headers): self
     {
         $copy = new self($this->method, $this->url, $this->query, $headers, $this->body);
         $copy->timeout = $this->timeout;
@@ -137,6 +140,18 @@ final class HttpRequest
     public function maskedUri(): string
     {
         return SecretMasker::maskUrl($this->uri());
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function __sleep(): array
+    {
+        if (SecretMasker::hasSecrets($this)) {
+            throw InvalidArgumentException::withoutTraceArguments('HttpRequest с токеном или ключом API не сериализуется');
+        }
+
+        return array_keys(get_object_vars($this));
     }
 
     /**

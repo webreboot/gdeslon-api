@@ -15,10 +15,108 @@ use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class ApiClientTest extends TestCase
 {
+    use TraceSecrets;
+
     private const SECRET = 'secret-token';
+
+    private const TOKEN = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
+
+    /**
+     * @return iterable<string, array{\Closure(FakeHttpTransport): FakeHttpTransport, \Closure(ApiClient, HttpRequest): mixed, class-string<\Throwable>}>
+     */
+    public static function failingCalls(): iterable
+    {
+        yield 'requestJson, 401' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(401, '{"detail":"Недопустимый токен."}'),
+            static fn (ApiClient $c, HttpRequest $r) => $c->requestJson($r),
+            AuthenticationException::class,
+        ];
+        yield 'request, 403' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(403, 'This affiliate token does not exists'),
+            static fn (ApiClient $c, HttpRequest $r) => $c->request($r),
+            AuthenticationException::class,
+        ];
+        yield 'requestAllowing, 500' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(500, '<h1>Server Error</h1>'),
+            static fn (ApiClient $c, HttpRequest $r) => $c->requestAllowing($r, 400),
+            HttpException::class,
+        ];
+        yield 'fetch, 502' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(502, 'Bad Gateway'),
+            static fn (ApiClient $c, HttpRequest $r) => $c->fetch($r),
+            HttpException::class,
+        ];
+        yield 'request, 304' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(304, ''),
+            static fn (ApiClient $c, HttpRequest $r) => $c->request($r),
+            HttpException::class,
+        ];
+        yield 'requestJson, битый JSON' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(200, '{'),
+            static fn (ApiClient $c, HttpRequest $r) => $c->requestJson($r),
+            UnexpectedResponseException::class,
+        ];
+        yield 'ошибка транспорта' => [
+            static fn (FakeHttpTransport $t) => $t->willFail(7),
+            static fn (ApiClient $c, HttpRequest $r) => $c->requestJson($r),
+            TransportException::class,
+        ];
+        yield 'таймаут' => [
+            static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out'),
+            static fn (ApiClient $c, HttpRequest $r) => $c->request($r),
+            TimeoutException::class,
+        ];
+    }
+
+    /**
+     * @return list<HttpRequest>
+     */
+    private static function requestsWithSecrets(): array
+    {
+        return [
+            HttpRequest::get('https://api.gdeslon.ru/api/search.xml', ['q' => 'x', '_gs_at' => self::TOKEN]),
+            HttpRequest::get('https://gdeslon.ru/api/v1/lost-orders/', [], ['Authorization' => 'Bearer ' . self::TOKEN]),
+        ];
+    }
+
+    /**
+     * @param \Closure(FakeHttpTransport): FakeHttpTransport $response
+     * @param \Closure(ApiClient, HttpRequest): mixed        $call
+     * @param class-string<\Throwable>                       $expected
+     */
+    #[DataProvider('failingCalls')]
+    public function testSecretsAreHiddenFromTraceArguments(\Closure $response, \Closure $call, string $expected): void
+    {
+        self::requireSensitiveParameter();
+
+        foreach (self::requestsWithSecrets() as $request) {
+            $client = new ApiClient($response(new FakeHttpTransport()));
+            $e = self::catchWithTraceArgs(static fn () => $call($client, $request), $expected);
+
+            self::assertTraceHidesSecrets($e, self::TOKEN);
+        }
+    }
+
+    /**
+     * @param \Closure(FakeHttpTransport): FakeHttpTransport $response
+     * @param \Closure(ApiClient, HttpRequest): mixed        $call
+     * @param class-string<\Throwable>                       $expected
+     */
+    #[DataProvider('failingCalls')]
+    public function testSecretsAreNotSerializedWithTrace(\Closure $response, \Closure $call, string $expected): void
+    {
+        foreach (self::requestsWithSecrets() as $request) {
+            $client = new ApiClient($response(new FakeHttpTransport()));
+            $e = self::catchWithTraceArgs(static fn () => $call($client, $request), $expected);
+
+            self::assertSerializedTraceHidesSecrets($e, self::TOKEN);
+            self::assertStringNotContainsString(self::TOKEN, self::fullString($e));
+        }
+    }
 
     public function testDecodesJsonObject(): void
     {

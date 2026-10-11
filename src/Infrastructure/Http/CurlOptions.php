@@ -13,6 +13,7 @@ final class CurlOptions
      * @return array<int, mixed>
      */
     public static function for(
+        #[\SensitiveParameter]
         HttpRequest $request,
         float $timeout,
         float $connectTimeout,

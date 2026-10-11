@@ -25,6 +25,7 @@ final class CommandContext
         public readonly Console $console,
         public readonly Clock $clock,
         public readonly bool $json,
+        #[\SensitiveParameter]
         public readonly Environment $environment = new Environment([]),
     ) {
     }

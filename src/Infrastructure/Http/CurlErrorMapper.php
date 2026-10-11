@@ -12,7 +12,7 @@ final class CurlErrorMapper
 {
     private const OPERATION_TIMEDOUT = 28;
 
-    public static function toException(HttpRequest $request, int $code, string $error): TransportException
+    public static function toException(#[\SensitiveParameter] HttpRequest $request, int $code, #[\SensitiveParameter] string $error): TransportException
     {
         $url = $request->maskedUri();
         $reason = $code === self::OPERATION_TIMEDOUT ? 'превышено время ожидания' : 'ошибка соединения';

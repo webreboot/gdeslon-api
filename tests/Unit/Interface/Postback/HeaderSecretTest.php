@@ -9,10 +9,14 @@ use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Interface\Postback\HeaderSecret;
 use Webreboot\GdeSlon\Interface\Postback\PostbackAuthenticationException;
+use Webreboot\GdeSlon\Interface\Postback\PostbackReceiver;
 use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class HeaderSecretTest extends TestCase
 {
+    use TraceSecrets;
+
     private const SECRET = 'test-secret-0123456789';
 
     public function testValidHeader(): void
@@ -92,5 +96,27 @@ final class HeaderSecretTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         new HeaderSecret('X-Gdeslon-Secret-Header', 'x-gdeslon-secret-header');
+    }
+
+    public function testIsNotSerializable(): void
+    {
+        $secret = new HeaderSecret('X-Gdeslon-Secret', self::SECRET);
+        foreach ([$secret, new PostbackReceiver($secret)] as $object) {
+            try {
+                serialize($object);
+                self::fail('Ожидалось исключение: ' . $object::class);
+            } catch (InvalidArgumentException $e) {
+                self::assertStringNotContainsString(self::SECRET, $e->getMessage());
+            }
+        }
+    }
+
+    public function testSwappedArgumentsAreHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => new HeaderSecret('abc/def+ghi=jkl0123', 'X-Gdeslon-Secret'), InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets($e, 'abc/def+ghi=jkl0123');
     }
 }

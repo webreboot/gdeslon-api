@@ -155,7 +155,7 @@ final class HttpLostOrderClaims implements LostOrderClaims
     public function __sleep(): array
     {
         if ($this->token !== null) {
-            throw new InvalidArgumentException('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
+            throw InvalidArgumentException::withoutTraceArguments('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
         }
 
         return array_keys(get_object_vars($this));
@@ -184,7 +184,7 @@ final class HttpLostOrderClaims implements LostOrderClaims
         return ['Authorization' => 'Bearer ' . $this->token, 'Accept' => 'application/json'];
     }
 
-    private function validationError(HttpRequest $request, HttpResponse $response): HttpException
+    private function validationError(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): HttpException
     {
         $errors = $this->mapper->errors($response->body());
         if ($errors === null) {
@@ -201,7 +201,7 @@ final class HttpLostOrderClaims implements LostOrderClaims
         );
     }
 
-    private static function httpError(HttpRequest $request, HttpResponse $response): HttpException
+    private static function httpError(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): HttpException
     {
         return new HttpException(
             sprintf('%s %s: HTTP %d', $request->method(), $request->maskedUri(), $response->statusCode()),

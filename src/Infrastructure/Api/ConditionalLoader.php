@@ -30,7 +30,7 @@ final class ConditionalLoader
      *
      * @return T
      */
-    public function load(HttpRequest $request, string $cacheId, callable $parse, ?callable $cacheable = null): mixed
+    public function load(#[\SensitiveParameter] HttpRequest $request, string $cacheId, callable $parse, ?callable $cacheable = null): mixed
     {
         $cache = $this->cache;
         $hit = $cache === null ? null : $this->cached($cache, $cacheId, $parse);

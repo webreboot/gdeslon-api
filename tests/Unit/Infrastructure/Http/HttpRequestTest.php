@@ -173,4 +173,51 @@ final class HttpRequestTest extends TestCase
         self::assertStringNotContainsString('secret-token', print_r($request, true));
         self::assertSame('https://h/?a=1&b=0&c=x', HttpRequest::get('https://h/', ['a' => true, 'b' => false, 'c' => 'x'])->uri(), 'скаляры как раньше');
     }
+
+    private const TOKEN = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
+
+    /**
+     * @return iterable<string, array{HttpRequest}>
+     */
+    public static function requestsWithSecrets(): iterable
+    {
+        yield '_gs_at' => [HttpRequest::get('https://api.gdeslon.ru/api/search.xml', ['q' => 'x', '_gs_at' => self::TOKEN])];
+        yield 'api_token' => [HttpRequest::get('https://www.gdeslon.ru/api/users/shops.xml', ['api_token' => self::TOKEN])];
+        yield 'api_token повтором' => [HttpRequest::get('https://gdeslon.ru/api/coupons.xml', ['API_TOKEN' => [self::TOKEN]])];
+        yield 'Bearer' => [HttpRequest::get('https://gdeslon.ru/api/v1/lost-orders/', [], ['Authorization' => 'Bearer ' . self::TOKEN])];
+        yield 'Basic, имя заголовка в другом регистре' => [HttpRequest::post('https://gdeslon.ru/api/orders/', '{}', ['authorization' => 'Basic ' . base64_encode('1234:' . self::TOKEN)])];
+        yield 'токен в самом адресе' => [HttpRequest::get('https://api.gdeslon.ru/api/search.xml?_gs_at=' . self::TOKEN, ['q' => 'x'])];
+        yield 'учётные данные в адресе' => [HttpRequest::get('https://1234:' . self::TOKEN . '@h/')];
+        yield 'копия с таймаутом' => [HttpRequest::get('https://h/', ['_gs_at' => self::TOKEN])->withTimeout(5.0)];
+    }
+
+    #[DataProvider('requestsWithSecrets')]
+    public function testRequestWithSecretsIsNotSerializable(HttpRequest $request): void
+    {
+        try {
+            serialize($request);
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringNotContainsString(self::TOKEN, $e->getMessage());
+            self::assertStringNotContainsString(base64_encode('1234:' . self::TOKEN), $e->getMessage());
+        }
+    }
+
+    public function testRequestWithoutSecretsSurvivesSerialization(): void
+    {
+        $requests = [
+            HttpRequest::get('https://api.gdeslon.ru/gdeslon-categories.json', ['q' => 'платье', 'merchant_id' => [1, 2]], ['Accept' => 'application/json']),
+            HttpRequest::post('https://h/api', '{"a":1}', ['Content-Type' => 'application/json'])->withTimeout(5.0),
+        ];
+        foreach ($requests as $request) {
+            $copy = unserialize(serialize($request));
+
+            self::assertInstanceOf(HttpRequest::class, $copy);
+            self::assertSame($request->method(), $copy->method());
+            self::assertSame($request->uri(), $copy->uri());
+            self::assertSame($request->headers(), $copy->headers());
+            self::assertSame($request->body(), $copy->body());
+            self::assertSame($request->timeout(), $copy->timeout());
+        }
+    }
 }

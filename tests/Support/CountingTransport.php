@@ -16,7 +16,7 @@ final class CountingTransport implements HttpTransport
     {
     }
 
-    public function send(HttpRequest $request): HttpResponse
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         $this->count++;
 

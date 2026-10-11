@@ -24,11 +24,11 @@ final class SecretMasker
     /**
      * @return list<string>
      */
-    public static function secretValues(HttpRequest $request): array
+    public static function secretValues(#[\SensitiveParameter] HttpRequest $request): array
     {
         $values = [];
         foreach ($request->query() as $name => $value) {
-            if (preg_match('~^(?:' . self::SECRET_PARAMETERS . ')$~i', $name) !== 1) {
+            if (!self::isSecretParameter((string) $name)) {
                 continue;
             }
             foreach (is_array($value) ? $value : [$value] as $item) {
@@ -52,6 +52,17 @@ final class SecretMasker
         return array_values(array_filter($values, static fn (string $value): bool => strlen($value) >= self::MIN_SECRET_LENGTH));
     }
 
+    public static function hasSecrets(#[\SensitiveParameter] HttpRequest $request): bool
+    {
+        foreach (array_keys($request->query()) as $name) {
+            if (self::isSecretParameter((string) $name)) {
+                return true;
+            }
+        }
+
+        return $request->header('Authorization') !== null || self::maskUrl($request->url()) !== $request->url();
+    }
+
     /**
      * @param list<string> $values
      */
@@ -67,5 +78,10 @@ final class SecretMasker
             '$1' . self::MASK,
             $text,
         ) ?? $text;
+    }
+
+    private static function isSecretParameter(string $name): bool
+    {
+        return preg_match('~^(?:' . self::SECRET_PARAMETERS . ')$~i', $name) === 1;
     }
 }

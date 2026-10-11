@@ -68,7 +68,7 @@ final class Application
         $clock = new SystemClock();
 
         return new self(
-            static fn (Config $config, ?CacheStore $cache): GdeSlon => GdeSlon::create($config, null, $cache, $clock),
+            static fn (#[\SensitiveParameter] Config $config, ?CacheStore $cache): GdeSlon => GdeSlon::create($config, null, $cache, $clock),
             new Console($in, $out, $err),
             $env,
             $clock,
@@ -201,7 +201,7 @@ final class Application
         return $command === null ? null : [$command, 1];
     }
 
-    private function config(Credentials $credentials, Environment $environment, ?float $timeout): Config
+    private function config(Credentials $credentials, #[\SensitiveParameter] Environment $environment, ?float $timeout): Config
     {
         $timeout ??= self::DEFAULT_TIMEOUT;
         $sales = $environment->userId() !== null && $environment->apiKey() !== null;

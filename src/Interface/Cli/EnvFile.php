@@ -28,7 +28,7 @@ final class EnvFile
     /**
      * @return array<string, string>
      */
-    public static function parse(string $contents): array
+    public static function parse(#[\SensitiveParameter] string $contents): array
     {
         if (str_starts_with($contents, "\xEF\xBB\xBF")) {
             $contents = substr($contents, 3);

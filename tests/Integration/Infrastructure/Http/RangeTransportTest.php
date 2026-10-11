@@ -14,9 +14,12 @@ use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
 use Webreboot\GdeSlon\Tests\Support\FakeRangeServer;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class RangeTransportTest extends TestCase
 {
+    use TraceSecrets;
+
     private const URL = 'https://api.gdeslon.ru/gdeslon-categories.json';
     private const SIZE = 159451;
 
@@ -342,6 +345,34 @@ final class RangeTransportTest extends TestCase
             self::assertSame($refused, $e);
         }
         self::assertCount(1, $unreachable->requests());
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): FakeRangeServer, class-string<TransportException>}>
+     */
+    public static function partFailures(): iterable
+    {
+        yield 'исчерпаны повторы части' => [static fn () => (new FakeRangeServer(self::body(self::SIZE)))->failPart(32768, 28, 10), TimeoutException::class];
+        yield 'файл изменился (ETag)' => [static fn () => (new FakeRangeServer(self::body(self::SIZE)))->changeAfter(1), TransportException::class];
+        yield 'файл изменился (412)' => [static fn () => (new FakeRangeServer(self::body(self::SIZE)))->changeAfter(1, honourIfMatch: true), TransportException::class];
+        yield 'неожиданная вторая часть' => [static fn () => (new FakeRangeServer(self::body(self::SIZE)))->override(2, new HttpResponse(503, 'busy', [])), TransportException::class];
+        yield 'слишком большой ответ' => [static fn () => (new FakeRangeServer('x'))->override(1, self::part(str_repeat('x', 16384), 0, 16383, 33554433)), TransportException::class];
+    }
+
+    /**
+     * @param \Closure(): FakeRangeServer        $server
+     * @param class-string<TransportException> $expected
+     */
+    #[DataProvider('partFailures')]
+    public function testPartFailuresDoNotLeakTokenThroughTrace(\Closure $server, string $expected): void
+    {
+        self::requireSensitiveParameter();
+        $token = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
+        $transport = new RangeTransport($server());
+
+        $e = self::catchWithTraceArgs(static fn () => $transport->send(HttpRequest::get(self::URL, ['_gs_at' => $token])), $expected);
+
+        self::assertTraceHidesSecrets($e, $token);
     }
 
     public function testTooLargeResponseIsRejectedAfterFirstPart(): void

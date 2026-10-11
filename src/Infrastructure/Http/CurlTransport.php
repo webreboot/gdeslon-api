@@ -28,7 +28,7 @@ final class CurlTransport implements HttpTransport
         $this->userAgent = $userAgent ?? self::defaultUserAgent();
     }
 
-    public static function fromConfig(Config $config): self
+    public static function fromConfig(#[\SensitiveParameter] Config $config): self
     {
         return new self($config->timeout(), $config->connectTimeout(), $config->userAgent());
     }
@@ -42,7 +42,7 @@ final class CurlTransport implements HttpTransport
         );
     }
 
-    public function send(HttpRequest $request): HttpResponse
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         $headers = new HeaderParser();
         $handle = curl_init();

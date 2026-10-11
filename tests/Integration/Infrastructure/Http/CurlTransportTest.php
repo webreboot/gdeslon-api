@@ -12,9 +12,12 @@ use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Tests\Support\LocalHttpServer;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class CurlTransportTest extends TestCase
 {
+    use TraceSecrets;
+
     private static LocalHttpServer $server;
 
     public static function setUpBeforeClass(): void
@@ -133,6 +136,19 @@ final class CurlTransportTest extends TestCase
             self::assertNotInstanceOf(TimeoutException::class, $e);
             self::assertSame(7, $e->curlErrorCode());
         }
+    }
+
+    public function testConnectionRefusedDoesNotLeakSecretsThroughTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $token = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
+        $basic = base64_encode('1234:test-api-key-0123');
+        $request = HttpRequest::get('http://127.0.0.1:' . LocalHttpServer::freePort() . '/', ['_gs_at' => $token], ['Authorization' => 'Basic ' . $basic]);
+
+        $e = self::catchWithTraceArgs(static fn () => (new CurlTransport())->send($request), TransportException::class);
+
+        self::assertSame(7, $e->curlErrorCode());
+        self::assertTraceHidesSecrets($e, $token, $basic);
     }
 
     public function testTruncatedBody(): void

@@ -21,7 +21,7 @@ final class Environment
      * @param array<string, string> $env
      * @param array<string, string> $file
      */
-    public function __construct(private readonly array $env, private readonly array $file = [])
+    public function __construct(#[\SensitiveParameter] private readonly array $env, #[\SensitiveParameter] private readonly array $file = [])
     {
     }
 

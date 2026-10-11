@@ -18,9 +18,12 @@ use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
 use Webreboot\GdeSlon\Interface\Postback\QueryStringParser;
 use Webreboot\GdeSlon\Interface\Postback\ReceivedPostback;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class PostbackReceiverTest extends TestCase
 {
+    use TraceSecrets;
+
     private const SECRET = 'test-secret-0123456789';
 
     public function testGetQuery(): void
@@ -235,9 +238,7 @@ final class PostbackReceiverTest extends TestCase
 
     public function testSecretIsHiddenFromTraceArguments(): void
     {
-        if (PHP_VERSION_ID < 80200) {
-            self::markTestSkipped('#[\SensitiveParameter] действует с PHP 8.2');
-        }
+        self::requireSensitiveParameter();
 
         $requests = [
             '415' => new PostbackRequest('POST', self::headers(['Content-Type' => 'text/csv']), '', 'a,b'),
@@ -245,15 +246,10 @@ final class PostbackReceiverTest extends TestCase
             '400 JSON' => new PostbackRequest('POST', self::headers(['Content-Type' => 'application/json']), '', '{"state":"3","state":"4"}'),
             '401' => new PostbackRequest('GET', ['X-Gdeslon-Secret' => [self::SECRET, 'x']], 'merchant_id=1&state=3'),
         ];
-        foreach ($requests as $case => $request) {
-            try {
-                self::receive($request);
-                self::fail("Ожидалось исключение: {$case}");
-            } catch (\Webreboot\GdeSlon\Interface\Postback\PostbackException $e) {
-                $frames = array_filter($e->getTrace(), static fn (array $frame): bool => str_starts_with($frame['class'] ?? '', 'Webreboot\\GdeSlon\\Interface\\'));
-                self::assertNotSame([], $frames, (string) $case);
-                self::assertStringNotContainsString(self::SECRET, var_export($frames, true), (string) $case);
-            }
+        foreach ($requests as $request) {
+            $e = self::catchWithTraceArgs(static fn () => self::receive($request), \Webreboot\GdeSlon\Interface\Postback\PostbackException::class);
+
+            self::assertTraceHidesSecrets($e, self::SECRET);
         }
     }
 }

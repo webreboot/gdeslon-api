@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Webreboot\GdeSlon\Tests\Support;
 
 use Webreboot\GdeSlon\Exception\TransportException;
+use Webreboot\GdeSlon\Infrastructure\Http\CurlErrorMapper;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 
 final class FakeHttpTransport implements HttpTransport
 {
-    /** @var list<HttpResponse|TransportException> */
+    /** @var list<HttpResponse|TransportException|array{int, string}> */
     private array $queue = [];
 
     /** @var list<HttpRequest> */
@@ -34,15 +35,25 @@ final class FakeHttpTransport implements HttpTransport
         return $this;
     }
 
-    public function send(HttpRequest $request): HttpResponse
+    public function willFail(int $code, string $error = 'Failed to connect'): self
+    {
+        $this->queue[] = [$code, $error];
+
+        return $this;
+    }
+
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         $this->requests[] = $request;
         $next = array_shift($this->queue);
         if ($next === null) {
-            throw new \LogicException('FakeHttpTransport: неожиданный запрос ' . $request->method() . ' ' . $request->uri());
+            throw new \LogicException('FakeHttpTransport: неожиданный запрос ' . $request->method() . ' ' . $request->maskedUri());
         }
         if ($next instanceof TransportException) {
             throw $next;
+        }
+        if (is_array($next)) {
+            throw CurlErrorMapper::toException($request, $next[0], $next[1]);
         }
 
         return $next;

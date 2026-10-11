@@ -258,6 +258,8 @@ $postback = $receiver->receive(new PostbackRequest(
 - Обязательны `merchant_id` и `state`. Невалидное необязательное поле становится `null` с записью в `warnings()`,
   конверсия не отбрасывается.
 - Все значения — недоверенный ввод: экранирование при выводе, подготовленные запросы к БД.
+- `HeaderSecret` и `PostbackReceiver` не сериализуются. `PostbackRequest` сериализуется вместе с заголовком секрета —
+  перед сохранением входящего запроса заголовок секрета удаляется.
 - XML — только UTF-8 без DOCTYPE. Для multipart нужна разобранная форма (`form`). PHP заменяет `.` и пробел в именах
   параметров `$_POST` на `_` — имена параметров ограничьте `[A-Za-z0-9_]`.
 - Формат времени и сумм в реальном postback не подтверждён (`docs/gdeslon-api/postback.md`). Принимаются ISO 8601,
@@ -384,6 +386,12 @@ new Config(rangeChunkSize: null);   // один запрос
 - редиректы не выполняются, TLS проверяется;
 - для обёртки `new RangeTransport($transport)` — соблюдение `HttpRequest::timeout()` и отказ от переиспользования
   соединения при `Connection: close`.
+- параметр запроса помечен атрибутом: в запросе токен или ключ, атрибут с интерфейса не наследуется, а без него на
+  PHP 8.2+ запрос попадёт в аргументы трассы исключений транспорта.
+
+```php
+public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
+```
 
 ## Исключения
 
@@ -401,6 +409,13 @@ new Config(rangeChunkSize: null);   // один запрос
 | `CategoryNotFoundException`, `MerchantNotFoundException` | `get()` с несуществующим ID |
 | `Domain\Claims\*Exception`, `CouponCriteriaRejectedException` | исходы заявок и отказ в фильтре купонов |
 | `Interface\Postback\PostbackException` | невалидный или неаутентифицированный postback (`responseStatus()`) |
+
+Токены и ключи не попадают в сообщения исключений, а на PHP 8.2+ — и в аргументы трассы (`getTrace()`): параметры с
+секретами помечены `#[\SensitiveParameter]`. На PHP 8.1 атрибут не действует — включите `zend.exception_ignore_args=On`
+(так в `php.ini-production`), иначе `var_export($e->getTrace())` и логгеры, которые пишут аргументы трассы, покажут
+токен. Исключения пакета не сериализуйте: на 8.2+ `serialize($e)` бросает исключение, если в трассе есть скрытый
+аргумент (`SensitiveParameterValue`), на 8.1 — если в ней запрос с токеном или ключом. Для логов и очередей берите
+`getMessage()` или `(string) $e`.
 
 ## CLI
 

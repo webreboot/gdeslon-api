@@ -29,6 +29,7 @@ use Webreboot\GdeSlon\Domain\Sales\OrderList;
 use Webreboot\GdeSlon\Domain\Sales\OrderRepository;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
+use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpCategoryRepository;
@@ -82,7 +83,7 @@ final class GdeSlon
         $this->coupons = $coupons ?? new HttpCouponFeed($client);
     }
 
-    public static function create(?Config $config = null, ?HttpTransport $transport = null, ?CacheStore $cache = null, ?Clock $clock = null): self
+    public static function create(#[\SensitiveParameter] ?Config $config = null, ?HttpTransport $transport = null, ?CacheStore $cache = null, ?Clock $clock = null): self
     {
         $config ??= new Config();
         $transport ??= TransportFactory::fromConfig($config);
@@ -191,5 +192,26 @@ final class GdeSlon
     public function coupons(CouponCriteria $criteria = new CouponCriteria()): CouponList
     {
         return $this->coupons->find($criteria);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function __sleep(): array
+    {
+        $properties = ['merchants', 'products', 'orders', 'lostOrders', 'coupons', 'categories', 'clock'];
+        foreach ($properties as $property) {
+            try {
+                serialize($this->{$property});
+            } catch (InvalidArgumentException $e) {
+                // отказ адаптера с секретом — уже без аргументов в трассе
+                throw $e;
+            } catch (\Throwable) {
+                // исходное исключение не цепляем: в его трассе — объект с секретами
+                throw InvalidArgumentException::withoutTraceArguments(sprintf('GdeSlon не сериализуется: не сериализуется %s (свой транспорт или кэш?)', $property));
+            }
+        }
+
+        return $properties;
     }
 }

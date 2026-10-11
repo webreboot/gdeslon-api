@@ -13,6 +13,7 @@ final class PostbackReceiver
     private readonly ConversionMapper $mapper;
 
     public function __construct(
+        #[\SensitiveParameter]
         private readonly ?HeaderSecret $secret,
         PostbackFields $fields = new PostbackFields(),
         private readonly int $maxBodyBytes = self::DEFAULT_MAX_BODY_BYTES,

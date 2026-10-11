@@ -178,6 +178,14 @@ final class GdeSlonTest extends TestCase
         self::assertStringNotContainsString('secret-token', $dump);
     }
 
+    public function testSleepListsEveryProperty(): void
+    {
+        $properties = array_map(static fn (\ReflectionProperty $p): string => $p->name, (new \ReflectionClass(GdeSlon::class))->getProperties());
+        $sleep = GdeSlon::create(new Config(), new FakeHttpTransport())->__sleep();
+
+        self::assertEqualsCanonicalizing($properties, $sleep);
+    }
+
     public function testClientWithTokenIsNotSerializable(): void
     {
         self::assertInstanceOf(GdeSlon::class, unserialize(serialize(GdeSlon::create(new Config(), new FakeHttpTransport()))));

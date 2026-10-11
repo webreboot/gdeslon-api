@@ -22,6 +22,7 @@ final class ToolContext
     public function __construct(
         private readonly \Closure $factory,
         public readonly Clock $clock,
+        #[\SensitiveParameter]
         public readonly Environment $environment,
         public readonly Console $console,
         public readonly bool $revealLinks = false,

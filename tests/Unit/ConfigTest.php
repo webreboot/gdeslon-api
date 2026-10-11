@@ -9,9 +9,12 @@ use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class ConfigTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testDefaults(): void
     {
         $config = new Config();
@@ -201,5 +204,17 @@ final class ConfigTest extends TestCase
         } catch (GdeSlonException $e) {
             self::assertStringNotContainsString('test-api-key', $e->getMessage());
         }
+    }
+
+    public function testSecretsAreHiddenFromTraceArguments(): void
+    {
+        self::requireSensitiveParameter();
+        $token = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
+
+        $e = self::catchWithTraceArgs(static fn () => new Config(apiToken: $token, userId: 1), InvalidArgumentException::class);
+        self::assertTraceHidesSecrets($e, $token);
+
+        $e = self::catchWithTraceArgs(static fn () => new Config(userId: 1, apiKey: 'test-api-key:0123'), InvalidArgumentException::class);
+        self::assertTraceHidesSecrets($e, 'test-api-key');
     }
 }

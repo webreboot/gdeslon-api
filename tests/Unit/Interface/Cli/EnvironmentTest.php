@@ -9,9 +9,23 @@ use Webreboot\GdeSlon\Interface\Cli\Console;
 use Webreboot\GdeSlon\Interface\Cli\EnvFile;
 use Webreboot\GdeSlon\Interface\Cli\Environment;
 use Webreboot\GdeSlon\Interface\Cli\UsageException;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class EnvironmentTest extends TestCase
 {
+    use TraceSecrets;
+
+    public function testEnvFileErrorDoesNotLeakTokenThroughTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $token = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
+
+        $e = self::catchWithTraceArgs(static fn () => EnvFile::parse("GDESLON_API_TOKEN={$token}\nсломано\n"), UsageException::class);
+
+        self::assertStringContainsString('строка 2', $e->getMessage());
+        self::assertTraceHidesSecrets($e, $token);
+    }
+
     public function testEnvFile(): void
     {
         $contents = "\xEF\xBB\xBF# ключи\r\n"

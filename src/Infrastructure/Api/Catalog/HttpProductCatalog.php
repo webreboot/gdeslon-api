@@ -25,6 +25,7 @@ final class HttpProductCatalog implements ProductCatalog
 
     public function __construct(
         private readonly ApiClient $client,
+        #[\SensitiveParameter]
         private readonly ?string $token = null,
         private readonly string $url = self::DEFAULT_URL,
     ) {
@@ -76,7 +77,7 @@ final class HttpProductCatalog implements ProductCatalog
     public function __sleep(): array
     {
         if ($this->token !== null) {
-            throw new InvalidArgumentException('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
+            throw InvalidArgumentException::withoutTraceArguments('Клиент с токеном API не сериализуется: создавайте его заново из настроек');
         }
 
         return array_keys(get_object_vars($this));
@@ -93,7 +94,7 @@ final class HttpProductCatalog implements ProductCatalog
     /**
      * @return array<string, scalar>
      */
-    private static function query(string $token, SearchCriteria $criteria): array
+    private static function query(#[\SensitiveParameter] string $token, SearchCriteria $criteria): array
     {
         $query = ['_gs_at' => $token, 'l' => $criteria->limit(), 'p' => $criteria->page()];
         $optional = [

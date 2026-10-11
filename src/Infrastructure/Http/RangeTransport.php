@@ -46,7 +46,7 @@ final class RangeTransport implements HttpTransport
         $this->hosts = array_map('strtolower', $hosts);
     }
 
-    public function send(HttpRequest $request): HttpResponse
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         if (!$this->applies($request)) {
             return $this->transport->send($request);
@@ -99,7 +99,7 @@ final class RangeTransport implements HttpTransport
         return new HttpResponse(200, $body, $headers);
     }
 
-    private function applies(HttpRequest $request): bool
+    private function applies(#[\SensitiveParameter] HttpRequest $request): bool
     {
         if ($request->method() !== 'GET' || $request->header('Range') !== null) {
             return false;
@@ -109,7 +109,7 @@ final class RangeTransport implements HttpTransport
         return is_string($host) && in_array(strtolower($host), $this->hosts, true);
     }
 
-    private function sendPart(HttpRequest $request, int $offset, int $total, string|null $etag, int &$chunk): HttpResponse
+    private function sendPart(#[\SensitiveParameter] HttpRequest $request, int $offset, int $total, string|null $etag, int &$chunk): HttpResponse
     {
         $minimum = min(self::MIN_CHUNK, $this->chunkSize);
         $attempts = $this->retries + 1;
@@ -142,7 +142,7 @@ final class RangeTransport implements HttpTransport
             : new TransportException($message, $request->method(), $request->maskedUri(), $last->curlErrorCode(), $last);
     }
 
-    private function partRequest(HttpRequest $request, int $offset, int $chunk, ?string $etag, bool $isContinuation): HttpRequest
+    private function partRequest(#[\SensitiveParameter] HttpRequest $request, int $offset, int $chunk, ?string $etag, bool $isContinuation): HttpRequest
     {
         $headers = [];
         foreach ($request->headers() as $name => $value) {
@@ -163,7 +163,7 @@ final class RangeTransport implements HttpTransport
         return $isContinuation ? $part->withTimeout($this->partTimeout) : $part;
     }
 
-    private function assertPart(HttpRequest $request, HttpResponse $part, int $offset, string $requested, ?int $total = null): ContentRange
+    private function assertPart(#[\SensitiveParameter] HttpRequest $request, HttpResponse $part, int $offset, string $requested, ?int $total = null): ContentRange
     {
         $range = $part->statusCode() === 206 ? ContentRange::parse($part->header('content-range') ?? '') : null;
         if ($range !== null && $total !== null && $range->total() !== $total) {
@@ -178,12 +178,12 @@ final class RangeTransport implements HttpTransport
         return $range;
     }
 
-    private function changed(HttpRequest $request): TransportException
+    private function changed(#[\SensitiveParameter] HttpRequest $request): TransportException
     {
         return $this->failure($request, 'ресурс изменился во время загрузки частями');
     }
 
-    private function failure(HttpRequest $request, string $reason): TransportException
+    private function failure(#[\SensitiveParameter] HttpRequest $request, string $reason): TransportException
     {
         return new TransportException(
             sprintf('%s %s: %s', $request->method(), $request->maskedUri(), $reason),

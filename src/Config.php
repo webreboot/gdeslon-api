@@ -116,7 +116,7 @@ final class Config
     public function __sleep(): array
     {
         if ($this->apiToken !== null || $this->apiKey !== null) {
-            throw new InvalidArgumentException('Config с токеном API не сериализуется: создавайте его заново из окружения');
+            throw InvalidArgumentException::withoutTraceArguments('Config с токеном API не сериализуется: создавайте его заново из окружения');
         }
 
         return array_keys(get_object_vars($this));

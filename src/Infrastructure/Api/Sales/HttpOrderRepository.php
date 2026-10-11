@@ -28,6 +28,7 @@ final class HttpOrderRepository implements OrderRepository
 
     public function __construct(
         private readonly ApiClient $client,
+        #[\SensitiveParameter]
         private readonly ?string $userId = null,
         #[\SensitiveParameter]
         private readonly ?string $apiKey = null,
@@ -71,7 +72,7 @@ final class HttpOrderRepository implements OrderRepository
     public function __sleep(): array
     {
         if ($this->apiKey !== null) {
-            throw new InvalidArgumentException('Клиент с ключом API по продажам не сериализуется: создавайте его заново из настроек');
+            throw InvalidArgumentException::withoutTraceArguments('Клиент с ключом API по продажам не сериализуется: создавайте его заново из настроек');
         }
 
         return array_keys(get_object_vars($this));

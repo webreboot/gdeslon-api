@@ -12,7 +12,7 @@ final class TransportFactory
     /**
      * @param list<string>|null $rangeHosts
      */
-    public static function fromConfig(Config $config, ?array $rangeHosts = null): HttpTransport
+    public static function fromConfig(#[\SensitiveParameter] Config $config, ?array $rangeHosts = null): HttpTransport
     {
         $curl = CurlTransport::fromConfig($config);
         $chunkSize = $config->rangeChunkSize();

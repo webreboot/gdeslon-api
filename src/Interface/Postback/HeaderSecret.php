@@ -14,7 +14,7 @@ final class HeaderSecret
 
     private readonly string $value;
 
-    public function __construct(string $header, #[\SensitiveParameter] string $value)
+    public function __construct(#[\SensitiveParameter] string $header, #[\SensitiveParameter] string $value)
     {
         $header = trim($header);
         if (preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]+$/', $header) !== 1) {
@@ -50,6 +50,12 @@ final class HeaderSecret
         if (!hash_equals($this->value, trim($values[0]))) {
             throw new PostbackAuthenticationException('Postback: неверный секрет');
         }
+    }
+
+    /** @return list<string> */
+    public function __sleep(): array
+    {
+        throw InvalidArgumentException::withoutTraceArguments('HeaderSecret не сериализуется: создавайте его заново из настроек');
     }
 
     /** @return array<string, mixed> */

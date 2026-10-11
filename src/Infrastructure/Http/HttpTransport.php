@@ -11,5 +11,5 @@ interface HttpTransport
     /**
      * @throws TransportException
      */
-    public function send(HttpRequest $request): HttpResponse;
+    public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse;
 }

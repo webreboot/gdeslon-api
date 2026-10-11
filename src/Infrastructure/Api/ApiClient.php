@@ -22,34 +22,34 @@ final class ApiClient
     {
     }
 
-    public function requestJson(HttpRequest $request): mixed
+    public function requestJson(#[\SensitiveParameter] HttpRequest $request): mixed
     {
         return $this->decodeJson($request, $this->send($request, []));
     }
 
-    public function request(HttpRequest $request): HttpResponse
+    public function request(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         return $this->send($request, []);
     }
 
-    public function requestAllowing(HttpRequest $request, int ...$statuses): HttpResponse
+    public function requestAllowing(#[\SensitiveParameter] HttpRequest $request, int ...$statuses): HttpResponse
     {
         return $this->send($request, array_values(array_diff($statuses, [401, 403])));
     }
 
-    public static function maskedSnippet(HttpRequest $request, HttpResponse $response): string
+    public static function maskedSnippet(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): string
     {
         $body = SecretMasker::maskValues($response->body(), SecretMasker::secretValues($request));
 
         return SecretMasker::maskText(self::snippet($body));
     }
 
-    public function fetch(HttpRequest $request): HttpResponse
+    public function fetch(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         return $this->send($request, [304]);
     }
 
-    public function decodeJson(HttpRequest $request, HttpResponse $response): mixed
+    public function decodeJson(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): mixed
     {
         try {
             return json_decode($response->body(), true, 512, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
@@ -67,7 +67,7 @@ final class ApiClient
     /**
      * @param list<int> $allowed
      */
-    private function send(HttpRequest $request, array $allowed): HttpResponse
+    private function send(#[\SensitiveParameter] HttpRequest $request, array $allowed): HttpResponse
     {
         $response = $this->transport->send($request);
         if ($response->isSuccessful() || in_array($response->statusCode(), $allowed, true)) {
