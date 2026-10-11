@@ -12,9 +12,13 @@ use Webreboot\GdeSlon\Domain\Sales\OrderDateField;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Domain\Sales\OrderType;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class OrderCriteriaTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testDefaults(): void
     {
         $criteria = new OrderCriteria();
@@ -73,6 +77,29 @@ final class OrderCriteriaTest extends TestCase
     public function testCyrillicSubId(): void
     {
         self::assertSame('тест', (new OrderCriteria(subId: 'тест'))->subId());
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): OrderCriteria}>
+     */
+    public static function rejectedCriteriaWithSubId(): iterable
+    {
+        yield 'sub_id не UTF-8' => [static fn (): OrderCriteria => new OrderCriteria(subId: PersonalDataMarkers::SUB . "\xff")];
+        yield 'неверная дата' => [static fn (): OrderCriteria => new OrderCriteria(until: '2026-02-31', subId: PersonalDataMarkers::SUB)];
+        yield 'статус 9' => [static fn (): OrderCriteria => new OrderCriteria(states: [9], subId: PersonalDataMarkers::SUB)];
+    }
+
+    /**
+     * @param \Closure(): OrderCriteria $create
+     */
+    #[DataProvider('rejectedCriteriaWithSubId')]
+    public function testSubIdIsHiddenFromTrace(\Closure $create): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs($create, InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB);
     }
 
     /**

@@ -137,7 +137,7 @@ final class GdeSlon
     /**
      * @throws GdeSlonException
      */
-    public function orders(OrderCriteria $criteria = new OrderCriteria()): OrderList
+    public function orders(#[\SensitiveParameter] OrderCriteria $criteria = new OrderCriteria()): OrderList
     {
         return $this->orders->find($criteria);
     }
@@ -164,7 +164,7 @@ final class GdeSlon
      * @throws LostOrderClaimUnconfirmedException
      * @throws GdeSlonException
      */
-    public function submitLostOrderClaim(NewLostOrderClaim $claim, bool $checkDuplicates = true): LostOrderClaim
+    public function submitLostOrderClaim(#[\SensitiveParameter] NewLostOrderClaim $claim, bool $checkDuplicates = true): LostOrderClaim
     {
         $claim->assertOrderDateWithin($this->clock->now()->setTimezone(new \DateTimeZone('Europe/Moscow')));
         if ($checkDuplicates) {

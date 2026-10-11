@@ -22,14 +22,19 @@ final class LostOrderClaim
 
     public function __construct(
         int|LostOrderClaimId $id,
+        #[\SensitiveParameter]
         string $orderNumber,
+        #[\SensitiveParameter]
         private readonly \DateTimeImmutable $orderDate,
+        #[\SensitiveParameter]
         private readonly OrderTotal $orderTotal,
         int|MerchantId $merchantId,
         private readonly LostOrderStatus $orderStatus,
         private readonly LostOrderClaimState $claimState,
         ?string $merchantName = null,
+        #[\SensitiveParameter]
         ?string $description = null,
+        #[\SensitiveParameter]
         ?string $attachmentUrl = null,
         private readonly ?\DateTimeImmutable $orderUpdatedAt = null,
     ) {

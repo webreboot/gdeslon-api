@@ -39,7 +39,7 @@ final class ConversionMapper
      *
      * @return array{Conversion, list<string>}
      */
-    public function map(array $parameters): array
+    public function map(#[\SensitiveParameter] array $parameters): array
     {
         $warnings = [];
         $optional = function (PostbackMacro $macro, \Closure $convert) use ($parameters, &$warnings): mixed {
@@ -89,7 +89,7 @@ final class ConversionMapper
     }
 
     /** @param array<string, string|NonScalarValue> $parameters */
-    private function merchantId(array $parameters): int
+    private function merchantId(#[\SensitiveParameter] array $parameters): int
     {
         $value = $this->required($parameters, PostbackMacro::MerchantId);
         $trimmed = trim($value);
@@ -101,7 +101,7 @@ final class ConversionMapper
     }
 
     /** @param array<string, string|NonScalarValue> $parameters */
-    private function state(array $parameters): OrderState
+    private function state(#[\SensitiveParameter] array $parameters): OrderState
     {
         $value = $this->required($parameters, PostbackMacro::State);
         $trimmed = trim($value);
@@ -114,7 +114,7 @@ final class ConversionMapper
     }
 
     /** @param array<string, string|NonScalarValue> $parameters */
-    private function required(array $parameters, PostbackMacro $macro): string
+    private function required(#[\SensitiveParameter] array $parameters, PostbackMacro $macro): string
     {
         $value = $this->parameter($parameters, $macro);
         if ($value === null) {
@@ -128,7 +128,7 @@ final class ConversionMapper
     }
 
     /** @param array<string, string|NonScalarValue> $parameters */
-    private function parameter(array $parameters, PostbackMacro $macro): string|NonScalarValue|null
+    private function parameter(#[\SensitiveParameter] array $parameters, PostbackMacro $macro): string|NonScalarValue|null
     {
         $name = $this->fields->nameOf($macro);
 

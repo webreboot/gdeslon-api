@@ -17,6 +17,11 @@
   трассу своего исключения (там был сериализуемый объект как аргумент `serialize()`): у этого исключения аргументов
   в трассе нет. `GdeSlon` со своим несериализуемым транспортом или кэшем (замыкание, клиент Redis) теперь отказывает
   так же — `InvalidArgumentException` пакета вместо исключения PHP с секретами в трассе.
+- Данные покупателей и продаж больше не попадают в аргументы трассы исключений на PHP 8.2+: тела ответов API
+  (заказы, заявки), `NewLostOrderClaim` с чеком (и значения при её создании: номер, дата, сумма, описание, файл),
+  фильтр sub_id, параметры и тело postback. Трасса подачи заявки больше не держит файл чека до 10 МиБ.
+- Ошибка разбора JSON (ответ API, тело postback) больше не цепляет `JsonException`: в её трассе на любой версии PHP
+  было всё тело ответа как аргумент `json_decode()`.
 
 ### Изменено
 
@@ -24,6 +29,14 @@
   `SensitiveParameterValue`, а `serialize()` такого исключения (в том числе без секрета, например ошибки `categories()`)
   бросает стандартное `\Exception` PHP. Для логов и очередей берите `getMessage()` или `(string) $e`.
 - Свой `HttpTransport`: помечайте `send(#[\SensitiveParameter] HttpRequest $request)` — атрибут интерфейса не наследуется.
+  Так же — `LostOrderClaims::submit()` (`NewLostOrderClaim`) и `OrderRepository::find()` (`OrderCriteria`).
+- `getPrevious()` теперь `null` у `UnexpectedResponseException` о битом JSON (`categories()`, `orders()`,
+  `lostOrders()`, `lostOrder()`, причина `LostOrderClaimUnconfirmedException`), у «Ответ заявки: …» и у
+  `InvalidPostbackException` о битом JSON-теле; текст ошибки JSON — в сообщении. На PHP 8.2+ `serialize()` бросает
+  исключение и у исключений, в трассе которых есть заявка, сумма или файл чека, фильтр sub_id, заказ, тело ответа или
+  данные postback (в трассе — `SensitiveParameterValue`): например, `DuplicateLostOrderClaimException`, ошибки
+  `submitLostOrderClaim()`, `orders()`, `AttachmentFile::load()`, валидации `NewLostOrderClaim`, `OrderTotal`,
+  `ClaimAttachment`, `OrderCriteria`, `Order`, `Conversion`.
 
 ## [0.1.0] — 2026-10-08
 

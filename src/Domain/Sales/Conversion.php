@@ -33,16 +33,23 @@ final class Conversion
         int|MerchantId $merchantId,
         private readonly OrderState $state,
         OrderId|string|null $orderId = null,
+        #[\SensitiveParameter]
         ?string $merchantOrderNumber = null,
+        #[\SensitiveParameter]
         array $subIds = [],
+        #[\SensitiveParameter]
         private readonly ?string $reward = null,
+        #[\SensitiveParameter]
         private readonly ?string $orderSum = null,
+        #[\SensitiveParameter]
         private readonly ?string $priceInCurrency = null,
         private readonly ?string $currency = null,
         private readonly ?\DateTimeImmutable $clickedAt = null,
         private readonly ?\DateTimeImmutable $actionAt = null,
+        #[\SensitiveParameter]
         ?string $userAgent = null,
         ?string $offerName = null,
+        #[\SensitiveParameter]
         ?string $clickId = null,
     ) {
         $this->merchantId = is_int($merchantId) ? new MerchantId($merchantId) : $merchantId;
@@ -161,7 +168,7 @@ final class Conversion
      *
      * @return array<int, string>
      */
-    private static function normalizeSubIds(array $subIds): array
+    private static function normalizeSubIds(#[\SensitiveParameter] array $subIds): array
     {
         $normalized = [];
         foreach ($subIds as $position => $value) {

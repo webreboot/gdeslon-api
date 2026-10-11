@@ -15,11 +15,12 @@ final class ClaimAttachment
     private function __construct(
         private readonly string $fileName,
         private readonly AttachmentType $type,
+        #[\SensitiveParameter]
         private readonly string $contents,
     ) {
     }
 
-    public static function fromContents(string $fileName, string $contents): self
+    public static function fromContents(#[\SensitiveParameter] string $fileName, #[\SensitiveParameter] string $contents): self
     {
         if ($contents === '') {
             throw new InvalidArgumentException('Вложение пустое');

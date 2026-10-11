@@ -25,9 +25,13 @@ use Webreboot\GdeSlon\Infrastructure\Api\Claims\HttpLostOrderClaims;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 use Webreboot\GdeSlon\Tests\Support\FrozenClock;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class HttpLostOrderClaimsTest extends TestCase
 {
+    use TraceSecrets;
+
     private const URL = 'https://gdeslon.ru/api/v1/lost-orders/';
     private const TOKEN = 'test-token';
     private const PDF = "%PDF-1.4\nчек";
@@ -300,6 +304,107 @@ final class HttpLostOrderClaimsTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         serialize($claims);
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(FakeHttpTransport): FakeHttpTransport, \Closure(HttpLostOrderClaims): mixed, class-string<\Throwable>}>
+     */
+    public static function claimFailures(): iterable
+    {
+        $claim = str_replace(['"2342lost"', '12020.22', '"Заказ после перехода с моего сайта"'], [
+            '"' . PersonalDataMarkers::ORDER . '"',
+            PersonalDataMarkers::TOTAL,
+            '"' . PersonalDataMarkers::MAIL . '"',
+        ], Fixtures::read('lost-orders/claim-synthetic.json'));
+        self::assertStringContainsString(PersonalDataMarkers::MAIL, $claim);
+        $find = static fn (HttpLostOrderClaims $c): mixed => $c->find(new LostOrderCriteria());
+        $get = static fn (HttpLostOrderClaims $c): mixed => $c->get(new LostOrderClaimId(5796));
+        $submit = static fn (HttpLostOrderClaims $c): mixed => $c->submit(self::markedClaim());
+
+        yield 'find: 400 с эхом' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(400, '{"errors":{"start_date":["Нет заказа ' . PersonalDataMarkers::ORDER . '"]}}'),
+            $find,
+            LostOrderValidationException::class,
+        ];
+        yield 'find: обрезанный JSON' => [static fn (FakeHttpTransport $t) => $t->willReturn(200, '[' . substr($claim, 0, -5)), $find, UnexpectedResponseException::class];
+        yield 'find: ни одна заявка не разобрана' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(200, '[' . str_replace('"in_waiting"', '"zzz"', $claim) . ']'),
+            $find,
+            UnexpectedResponseException::class,
+        ];
+        yield 'get: битая дата' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(200, str_replace('"2026-09-24"', '"2026-02-31"', $claim)),
+            $get,
+            UnexpectedResponseException::class,
+        ];
+        yield 'get: 404 не по формату' => [static fn (FakeHttpTransport $t) => $t->willReturn(404, '<h1>' . PersonalDataMarkers::ORDER . '</h1>'), $get, HttpException::class];
+        yield 'submit: 400 с эхом' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(400, '{"errors":{"order_id":["Заявка на заказ ' . PersonalDataMarkers::ORDER . ' уже есть"]}}'),
+            $submit,
+            LostOrderValidationException::class,
+        ];
+        yield 'submit: 400 не по формату' => [static fn (FakeHttpTransport $t) => $t->willReturn(400, '<p>' . PersonalDataMarkers::ORDER . '</p>'), $submit, HttpException::class];
+        yield 'submit: 401' => [static fn (FakeHttpTransport $t) => $t->willReturn(401, '{"detail":"Недопустимый токен."}'), $submit, AuthenticationException::class];
+        yield 'submit: 503' => [static fn (FakeHttpTransport $t) => $t->willReturn(503, 'error'), $submit, LostOrderClaimUnconfirmedException::class];
+        yield 'submit: таймаут' => [static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out'), $submit, LostOrderClaimUnconfirmedException::class];
+        yield 'submit: ошибка соединения' => [static fn (FakeHttpTransport $t) => $t->willFail(7), $submit, TransportException::class];
+        yield 'submit: 201 не JSON' => [static fn (FakeHttpTransport $t) => $t->willReturn(201, '<html>' . PersonalDataMarkers::ORDER), $submit, LostOrderClaimUnconfirmedException::class];
+        yield 'submit: 201 с битой суммой' => [
+            static fn (FakeHttpTransport $t) => $t->willReturn(201, str_replace(PersonalDataMarkers::TOTAL, '"abc"', $claim)),
+            $submit,
+            LostOrderClaimUnconfirmedException::class,
+        ];
+        yield 'submit: дата вне окна' => [
+            static fn (FakeHttpTransport $t) => $t,
+            static fn (HttpLostOrderClaims $c): mixed => $c->submit(self::markedClaim(date: '2026-07-06')),
+            InvalidArgumentException::class,
+        ];
+    }
+
+    /**
+     * @param \Closure(FakeHttpTransport): FakeHttpTransport $response
+     * @param \Closure(HttpLostOrderClaims): mixed           $call
+     * @param class-string<\Throwable>                       $expected
+     */
+    #[DataProvider('claimFailures')]
+    public function testClaimDataIsHiddenFromTrace(\Closure $response, \Closure $call, string $expected): void
+    {
+        self::requireSensitiveParameter();
+        $claims = self::claims($response(new FakeHttpTransport()));
+
+        $e = self::catchWithTraceArgs(static fn () => $call($claims), $expected);
+
+        self::assertTraceHidesSecrets(
+            $e,
+            PersonalDataMarkers::ORDER,
+            PersonalDataMarkers::TOTAL,
+            PersonalDataMarkers::MAIL,
+            PersonalDataMarkers::PHONE,
+            PersonalDataMarkers::RECEIPT_MARK,
+        );
+    }
+
+    public function testSubmitTraceIsSmallWithLargeReceipt(): void
+    {
+        self::requireSensitiveParameter();
+        $claims = self::claims((new FakeHttpTransport())->willReturn(503, 'error'));
+        $claim = self::markedClaim(receipt: PersonalDataMarkers::RECEIPT . str_repeat('x', 1048576));
+
+        $e = self::catchWithTraceArgs(static fn () => $claims->submit($claim), LostOrderClaimUnconfirmedException::class);
+
+        self::assertTraceArgsSmallerThan($e, 65536);
+    }
+
+    private static function markedClaim(string $date = '2026-09-24', string $receipt = PersonalDataMarkers::RECEIPT): NewLostOrderClaim
+    {
+        return new NewLostOrderClaim(
+            PersonalDataMarkers::ORDER,
+            $date,
+            PersonalDataMarkers::TOTAL,
+            2573,
+            ClaimAttachment::fromContents('receipt.pdf', $receipt),
+            PersonalDataMarkers::MAIL . ' ' . PersonalDataMarkers::PHONE,
+        );
     }
 
     private static function claims(FakeHttpTransport $transport): HttpLostOrderClaims

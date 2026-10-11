@@ -37,7 +37,7 @@ final class HttpCategoryRepository implements CategoryRepository
         return $this->loader->load(
             $request,
             $this->url,
-            fn (HttpResponse $response): CategoryTree => $this->mapper->toTree($this->client->decodeJson($request, $response)),
+            fn (#[\SensitiveParameter] HttpResponse $response): CategoryTree => $this->mapper->toTree($this->client->decodeJson($request, $response)),
         );
     }
 }

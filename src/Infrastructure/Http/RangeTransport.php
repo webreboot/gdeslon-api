@@ -163,7 +163,7 @@ final class RangeTransport implements HttpTransport
         return $isContinuation ? $part->withTimeout($this->partTimeout) : $part;
     }
 
-    private function assertPart(#[\SensitiveParameter] HttpRequest $request, HttpResponse $part, int $offset, string $requested, ?int $total = null): ContentRange
+    private function assertPart(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $part, int $offset, string $requested, ?int $total = null): ContentRange
     {
         $range = $part->statusCode() === 206 ? ContentRange::parse($part->header('content-range') ?? '') : null;
         if ($range !== null && $total !== null && $range->total() !== $total) {

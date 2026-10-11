@@ -22,7 +22,7 @@ final class LostOrderClaimMapper
 
     private const DATE_PATTERN = '~^(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})?)?$~';
 
-    public function toList(mixed $payload, LostOrderCriteria $criteria): LostOrderClaimList
+    public function toList(#[\SensitiveParameter] mixed $payload, LostOrderCriteria $criteria): LostOrderClaimList
     {
         $records = self::records($payload);
 
@@ -63,24 +63,22 @@ final class LostOrderClaimMapper
         );
     }
 
-    public function toClaim(mixed $payload): LostOrderClaim
+    public function toClaim(#[\SensitiveParameter] mixed $payload): LostOrderClaim
     {
         if (!is_array($payload) || array_is_list($payload)) {
             throw new UnexpectedResponseException(sprintf('Ответ заявки: ожидался объект, получен %s', is_array($payload) ? 'массив' : get_debug_type($payload)));
         }
         try {
             return $this->claim($payload);
-        } catch (InvalidArgumentException $e) {
-            throw new UnexpectedResponseException('Ответ заявки: ' . $e->getMessage(), $e);
-        } catch (UnexpectedResponseException $e) {
-            throw new UnexpectedResponseException('Ответ заявки: ' . $e->getMessage(), $e);
+        } catch (InvalidArgumentException | UnexpectedResponseException $e) {
+            throw new UnexpectedResponseException('Ответ заявки: ' . $e->getMessage());
         }
     }
 
     /**
      * @return array<string, list<string>>|null
      */
-    public function errors(string $body): ?array
+    public function errors(#[\SensitiveParameter] string $body): ?array
     {
         try {
             $decoded = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
@@ -106,7 +104,7 @@ final class LostOrderClaimMapper
     /**
      * @return array<array-key, mixed>
      */
-    private static function records(mixed $payload): array
+    private static function records(#[\SensitiveParameter] mixed $payload): array
     {
         if (is_array($payload) && array_is_list($payload)) {
             return $payload;

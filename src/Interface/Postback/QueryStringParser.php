@@ -12,7 +12,7 @@ final class QueryStringParser
     public const MAX_PARAMETERS = 200;
 
     /** @return array<string, string> */
-    public static function parse(string $query): array
+    public static function parse(#[\SensitiveParameter] string $query): array
     {
         $parameters = [];
         foreach (explode('&', $query) as $pair) {

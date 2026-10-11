@@ -13,9 +13,13 @@ use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Domain\Sales\OrderType;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class OrderListTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testListKeepsApiOrder(): void
     {
         $criteria = new OrderCriteria(days: 7);
@@ -56,5 +60,15 @@ final class OrderListTest extends TestCase
     private static function order(string $id, OrderState $state = OrderState::New): Order
     {
         return new Order($id, 1, $state, OrderType::Product, new Money('1', 'RUB'));
+    }
+
+    public function testDuplicateOrdersAreHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $order = new Order('1', 1, OrderState::New, OrderType::Product, new Money('1', 'RUB'), merchantOrderNumber: PersonalDataMarkers::ORDER, subId: PersonalDataMarkers::SUB, keywords: PersonalDataMarkers::MAIL);
+
+        $e = self::catchWithTraceArgs(static fn () => new OrderList(new OrderCriteria(), [$order, $order]), InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::ORDER, PersonalDataMarkers::SUB, PersonalDataMarkers::MAIL);
     }
 }

@@ -7,9 +7,13 @@ namespace Webreboot\GdeSlon\Tests\Unit\Interface\Postback;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Interface\Postback\InvalidPostbackException;
 use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class PostbackRequestTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testHeadersAreCaseInsensitive(): void
     {
         $request = new PostbackRequest(
@@ -82,6 +86,20 @@ final class PostbackRequestTest extends TestCase
         }
 
         self::assertSame(100, strlen(PostbackRequest::fromServer(['REQUEST_METHOD' => 'POST'], [], self::stream(str_repeat('x', 100)), 100)->body()));
+    }
+
+    public function testOversizedRequestHidesPostForm(): void
+    {
+        self::requireSensitiveParameter();
+        $post = ['sub_id' => PersonalDataMarkers::SUB, 'action_ip' => PersonalDataMarkers::IP];
+
+        $e = self::catchWithTraceArgs(
+            static fn () => PostbackRequest::fromServer(['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '70000'], $post, null, 100),
+            InvalidPostbackException::class,
+        );
+
+        self::assertSame(413, $e->responseStatus());
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB, PersonalDataMarkers::IP);
     }
 
     public function testSecretsAreHiddenFromDumpsAndTraces(): void

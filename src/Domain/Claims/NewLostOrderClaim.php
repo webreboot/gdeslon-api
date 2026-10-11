@@ -22,11 +22,16 @@ final class NewLostOrderClaim
     private readonly ?string $description;
 
     public function __construct(
+        #[\SensitiveParameter]
         string $orderNumber,
+        #[\SensitiveParameter]
         \DateTimeInterface|string $orderDate,
+        #[\SensitiveParameter]
         OrderTotal|string|int|float $orderTotal,
         int|MerchantId $merchant,
+        #[\SensitiveParameter]
         private readonly ClaimAttachment $attachment,
+        #[\SensitiveParameter]
         ?string $description = null,
     ) {
         self::assertUtf8($orderNumber, 'Номер заказа');
@@ -102,7 +107,7 @@ final class NewLostOrderClaim
         }
     }
 
-    private static function date(\DateTimeInterface|string $date): string
+    private static function date(#[\SensitiveParameter] \DateTimeInterface|string $date): string
     {
         if ($date instanceof \DateTimeInterface) {
             return $date->format('Y-m-d');
@@ -115,14 +120,14 @@ final class NewLostOrderClaim
         return $date;
     }
 
-    private static function assertUtf8(string $value, string $what): void
+    private static function assertUtf8(#[\SensitiveParameter] string $value, string $what): void
     {
         if (preg_match('//u', $value) !== 1) {
             throw new InvalidArgumentException(sprintf('%s: строка не в UTF-8', $what));
         }
     }
 
-    private static function assertLength(string $value, string $what): void
+    private static function assertLength(#[\SensitiveParameter] string $value, string $what): void
     {
         if (preg_match('/^.{0,' . self::MAX_TEXT . '}\z/us', $value) !== 1) {
             throw new InvalidArgumentException(sprintf('%s длиннее %d символов', $what, self::MAX_TEXT));

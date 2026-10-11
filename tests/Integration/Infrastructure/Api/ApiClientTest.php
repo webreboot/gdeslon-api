@@ -223,8 +223,12 @@ final class ApiClientTest extends TestCase
             (new ApiClient($transport))->requestJson(self::requestWithToken());
             self::fail('Ожидалось исключение');
         } catch (UnexpectedResponseException $e) {
-            self::assertInstanceOf(\JsonException::class, $e->getPrevious());
+            self::assertNull($e->getPrevious());
+            self::assertNoFrame($e, 'json_decode');
             self::assertStringContainsString(strlen($body) . ' байт', $e->getMessage());
+            json_decode($body);
+            self::assertNotSame(JSON_ERROR_NONE, json_last_error());
+            self::assertStringContainsString(json_last_error_msg(), $e->getMessage(), 'причина — в сообщении');
             self::assertStringContainsString('GET https://api.gdeslon.ru/api/search.xml?q=x&_gs_at=***', $e->getMessage());
             self::assertStringNotContainsString(self::SECRET, $e->getMessage());
         }
@@ -239,6 +243,26 @@ final class ApiClientTest extends TestCase
         yield 'HTML' => ['<!DOCTYPE html><html><body>Ошибка</body></html>'];
         yield 'обрезанный JSON' => ['{"1":{"_id":1,"name":"Подар'];
         yield 'невалидный UTF-8' => ["{\"name\":\"\xff\xfe\"}"];
+        yield 'глубже 512 уровней' => [str_repeat('[', 600) . str_repeat(']', 600)];
+    }
+
+    public function testBrokenJsonBodyIsHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $body = '[{"sub_id":"sub-ПЕТРОВ-42","merchant_order_id":"GS-ЗАКАЗ-ИВАНОВ-777"';
+        $client = new ApiClient((new FakeHttpTransport())->willReturn(200, $body));
+
+        $e = self::catchWithTraceArgs(static fn () => $client->requestJson(self::requestWithToken()), UnexpectedResponseException::class);
+
+        self::assertTraceHidesSecrets($e, 'sub-ПЕТРОВ-42', 'GS-ЗАКАЗ-ИВАНОВ-777');
+    }
+
+    public function testScalarJsonIsStillDecoded(): void
+    {
+        $client = new ApiClient(new FakeHttpTransport());
+
+        self::assertNull($client->decodeJson(HttpRequest::get('https://h/'), new HttpResponse(200, 'null', [])));
+        self::assertSame(0, $client->decodeJson(HttpRequest::get('https://h/'), new HttpResponse(200, '0', [])));
     }
 
     public function testTransportExceptionsPassThroughUnchanged(): void

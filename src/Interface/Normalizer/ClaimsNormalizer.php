@@ -22,7 +22,7 @@ final class ClaimsNormalizer
     /**
      * @return array<string, mixed>
      */
-    public static function claim(LostOrderClaim $claim): array
+    public static function claim(#[\SensitiveParameter] LostOrderClaim $claim): array
     {
         return [
             'id' => $claim->id()->value(),
@@ -42,7 +42,7 @@ final class ClaimsNormalizer
     /**
      * @return array{claims: list<array<string, mixed>>, skipped: list<string>}
      */
-    public static function claimList(LostOrderClaimList $list): array
+    public static function claimList(#[\SensitiveParameter] LostOrderClaimList $list): array
     {
         return ['claims' => array_map(self::claim(...), $list->all()), 'skipped' => $list->skipped()];
     }
@@ -50,7 +50,7 @@ final class ClaimsNormalizer
     /**
      * @return array<string, mixed>
      */
-    public static function newClaim(NewLostOrderClaim $claim): array
+    public static function newClaim(#[\SensitiveParameter] NewLostOrderClaim $claim): array
     {
         return [
             'order_number' => $claim->orderNumber(),

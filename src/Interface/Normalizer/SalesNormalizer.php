@@ -21,7 +21,7 @@ final class SalesNormalizer
     /**
      * @return array<string, mixed>
      */
-    public static function order(Order $order): array
+    public static function order(#[\SensitiveParameter] Order $order): array
     {
         return [
             'id' => $order->id()->value(),
@@ -47,7 +47,7 @@ final class SalesNormalizer
     /**
      * @return array{orders: list<array<string, mixed>>, skipped: list<string>}
      */
-    public static function orderList(OrderList $list): array
+    public static function orderList(#[\SensitiveParameter] OrderList $list): array
     {
         return ['orders' => array_map(self::order(...), $list->all()), 'skipped' => $list->skipped()];
     }

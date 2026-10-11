@@ -12,7 +12,7 @@ final class JsonBodyParser
     private const MAX_DEPTH = 8;
 
     /** @return array<string, string|NonScalarValue> */
-    public static function parse(string $body): array
+    public static function parse(#[\SensitiveParameter] string $body): array
     {
         $body = trim($body);
         if ($body === '') {
@@ -22,7 +22,8 @@ final class JsonBodyParser
         try {
             $decoded = json_decode($body, true, self::MAX_DEPTH, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
         } catch (\JsonException $e) {
-            throw new InvalidPostbackException(self::reason($e), 400, null, $e);
+            // без previous: в аргументах кадра json_decode() в трассе JsonException — всё тело postback
+            throw new InvalidPostbackException(self::reason($e));
         }
         if (!is_array($decoded) || !str_starts_with($body, '{')) {
             throw new InvalidPostbackException(sprintf('Postback: тело JSON не объект, а %s', is_array($decoded) ? 'массив' : get_debug_type($decoded)));
@@ -41,7 +42,7 @@ final class JsonBodyParser
         return $fields;
     }
 
-    private static function assertUniqueKeys(string $json): void
+    private static function assertUniqueKeys(#[\SensitiveParameter] string $json): void
     {
         $seen = [];
         $depth = 0;

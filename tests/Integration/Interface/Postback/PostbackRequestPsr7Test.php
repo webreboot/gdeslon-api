@@ -9,9 +9,13 @@ use Nyholm\Psr7\Stream;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Interface\Postback\InvalidPostbackException;
 use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class PostbackRequestPsr7Test extends TestCase
 {
+    use TraceSecrets;
+
     public function testFromPsr7(): void
     {
         $body = Stream::create('{"merchant_id":"2573","state":"3"}');
@@ -37,6 +41,19 @@ final class PostbackRequestPsr7Test extends TestCase
         $this->expectExceptionMessage('100');
 
         PostbackRequest::fromPsr7(new ServerRequest('POST', 'https://example.com/', [], str_repeat('x', 101)), 100);
+    }
+
+    public function testOversizedRequestIsHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $psr = (new ServerRequest('POST', 'https://example.com/postback?action_ip=' . PersonalDataMarkers::IP, [
+            'X-Gdeslon-Secret' => 'test-secret-0123456789',
+            'Content-Length' => '5000',
+        ], 'x'))->withParsedBody(['sub_id' => PersonalDataMarkers::SUB, 'user_agent' => PersonalDataMarkers::UA]);
+
+        $e = self::catchWithTraceArgs(static fn () => PostbackRequest::fromPsr7($psr, 100), InvalidPostbackException::class);
+
+        self::assertTraceHidesSecrets($e, 'test-secret-0123456789', PersonalDataMarkers::IP, PersonalDataMarkers::SUB, PersonalDataMarkers::UA);
     }
 
     public function testContentLengthLimit(): void

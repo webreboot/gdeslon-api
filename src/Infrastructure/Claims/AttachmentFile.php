@@ -16,7 +16,7 @@ final class AttachmentFile
     /**
      * @throws InvalidArgumentException
      */
-    public static function load(string $path): ClaimAttachment
+    public static function load(#[\SensitiveParameter] string $path): ClaimAttachment
     {
         $name = basename(str_replace('\\', '/', $path));
         if (!is_file($path) || !is_readable($path)) {

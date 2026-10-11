@@ -23,5 +23,5 @@ interface LostOrderClaims
      * @throws LostOrderClaimUnconfirmedException
      * @throws GdeSlonException
      */
-    public function submit(NewLostOrderClaim $claim): LostOrderClaim;
+    public function submit(#[\SensitiveParameter] NewLostOrderClaim $claim): LostOrderClaim;
 }

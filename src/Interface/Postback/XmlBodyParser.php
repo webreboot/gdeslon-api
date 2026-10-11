@@ -13,7 +13,7 @@ final class XmlBodyParser
     private const DOCTYPE_IN_PROLOG = '/^(?:\xEF\xBB\xBF)?\s*(?:(?:<\?.*?\?>|<!--.*?-->)\s*)*<!(?:DOCTYPE|ENTITY)/is';
 
     /** @return array<string, string|NonScalarValue> */
-    public static function parse(string $body): array
+    public static function parse(#[\SensitiveParameter] string $body): array
     {
         if (trim($body) === '') {
             throw new InvalidPostbackException('Postback: пустое тело XML');
@@ -36,7 +36,7 @@ final class XmlBodyParser
     }
 
     /** @return array<string, string|NonScalarValue> */
-    private static function read(string $body): array
+    private static function read(#[\SensitiveParameter] string $body): array
     {
         $reader = new \XMLReader();
         if (!$reader->XML($body, 'UTF-8', LIBXML_NONET | self::IGNORE_DECLARED_ENCODING)) {

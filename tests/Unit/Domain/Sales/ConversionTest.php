@@ -11,9 +11,13 @@ use Webreboot\GdeSlon\Domain\Sales\Conversion;
 use Webreboot\GdeSlon\Domain\Sales\OrderId;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class ConversionTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testMinimalConversion(): void
     {
         $conversion = new Conversion(merchantId: 2573, state: OrderState::Confirmed);
@@ -134,5 +138,48 @@ final class ConversionTest extends TestCase
         foreach (['rub', 'RU', 'РУБ', "RUB\n"] as $currency) {
             yield 'валюта «' . $currency . '»' => [static fn (): Conversion => new Conversion(1, OrderState::New, currency: $currency), 'валют'];
         }
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): Conversion}>
+     */
+    public static function rejectedSubIds(): iterable
+    {
+        yield 'sub_id2 не UTF-8' => [static fn (): Conversion => new Conversion(2573, OrderState::New, subIds: [1 => PersonalDataMarkers::SUB, 2 => "x\xff"])];
+        yield 'позиция 6' => [static fn (): Conversion => new Conversion(2573, OrderState::New, subIds: [1 => PersonalDataMarkers::SUB, 6 => 'x'])];
+    }
+
+    /**
+     * @param \Closure(): Conversion $create
+     */
+    #[DataProvider('rejectedSubIds')]
+    public function testSubIdsAreHiddenFromTrace(\Closure $create): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs($create, InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB);
+    }
+
+    public function testInvalidConversionIsHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(
+            static fn () => new Conversion(
+                2573,
+                OrderState::New,
+                merchantOrderNumber: PersonalDataMarkers::ORDER,
+                subIds: [1 => PersonalDataMarkers::SUB],
+                reward: PersonalDataMarkers::TOTAL,
+                orderSum: 'x',
+                userAgent: PersonalDataMarkers::UA,
+                clickId: PersonalDataMarkers::MAIL,
+            ),
+            InvalidArgumentException::class,
+        );
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::ORDER, PersonalDataMarkers::SUB, PersonalDataMarkers::TOTAL, PersonalDataMarkers::UA, PersonalDataMarkers::MAIL);
     }
 }

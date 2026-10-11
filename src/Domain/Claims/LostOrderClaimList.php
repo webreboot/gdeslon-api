@@ -19,7 +19,7 @@ final class LostOrderClaimList implements \IteratorAggregate, \Countable
      * @param iterable<LostOrderClaim> $claims
      * @param list<string>             $skipped
      */
-    public function __construct(private readonly LostOrderCriteria $criteria, iterable $claims, private readonly array $skipped = [])
+    public function __construct(private readonly LostOrderCriteria $criteria, #[\SensitiveParameter] iterable $claims, private readonly array $skipped = [])
     {
         foreach ($claims as $claim) {
             $id = $claim->id()->value();

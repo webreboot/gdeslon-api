@@ -39,7 +39,7 @@ final class HttpOrderRepository implements OrderRepository
         $this->mapper = new OrderMapper();
     }
 
-    public function find(OrderCriteria $criteria): OrderList
+    public function find(#[\SensitiveParameter] OrderCriteria $criteria): OrderList
     {
         if ($this->userId === null || $this->apiKey === null) {
             throw new InvalidArgumentException(
@@ -90,7 +90,7 @@ final class HttpOrderRepository implements OrderRepository
         ];
     }
 
-    private function body(OrderCriteria $criteria): string
+    private function body(#[\SensitiveParameter] OrderCriteria $criteria): string
     {
         $until = $criteria->until()
             ?? $this->clock->now()->setTimezone(new \DateTimeZone(self::TIMEZONE))->format('Y-m-d');

@@ -9,9 +9,13 @@ use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Claims\AttachmentType;
 use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class ClaimAttachmentTest extends TestCase
 {
+    use TraceSecrets;
+
     public const JPEG = "\xFF\xD8\xFF\xE0jpeg-bytes";
     public const PNG = "\x89PNG\r\n\x1A\npng-bytes";
     public const PDF = "%PDF-1.4\nчек";
@@ -88,6 +92,38 @@ final class ClaimAttachmentTest extends TestCase
         $long = ClaimAttachment::fromContents(str_repeat('a', 300) . '.pdf', self::PDF)->fileName();
         self::assertLessThanOrEqual(100, strlen($long));
         self::assertStringEndsWith('.pdf', $long);
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): ClaimAttachment}>
+     */
+    public static function rejectedFiles(): iterable
+    {
+        yield 'не JPEG/PNG/PDF' => [static fn (): ClaimAttachment => ClaimAttachment::fromContents('receipt_Ivanov.txt', "PK\x03\x04" . PersonalDataMarkers::RECEIPT_MARK)];
+        yield 'расширение не по содержимому' => [static fn (): ClaimAttachment => ClaimAttachment::fromContents('C:\\Users\\Ivanov\\receipt_Ivanov.png', PersonalDataMarkers::RECEIPT)];
+    }
+
+    /**
+     * @param \Closure(): ClaimAttachment $create
+     */
+    #[DataProvider('rejectedFiles')]
+    public function testRejectedFileIsHiddenFromTrace(\Closure $create): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs($create, InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets($e, 'Ivanov', PersonalDataMarkers::RECEIPT_MARK);
+    }
+
+    public function testOversizedFileIsNotKeptInTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $contents = PersonalDataMarkers::RECEIPT . str_repeat('x', ClaimAttachment::MAX_SIZE);
+
+        $e = self::catchWithTraceArgs(static fn () => ClaimAttachment::fromContents('чек_ИВАНОВ.pdf', $contents), InvalidArgumentException::class);
+
+        self::assertTraceArgsSmallerThan($e, 65536);
     }
 
     public function testContentsAreHiddenFromDumps(): void

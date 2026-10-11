@@ -32,6 +32,7 @@ final class OrderCriteria
         int|MerchantId|null $merchant = null,
         array $states = [],
         private readonly ?OrderType $type = null,
+        #[\SensitiveParameter]
         ?string $subId = null,
     ) {
         $this->until = $until === null ? null : self::date($until);
@@ -126,7 +127,7 @@ final class OrderCriteria
             ?? throw new InvalidArgumentException(sprintf('Неизвестный статус %d, ожидался 0..4', $state));
     }
 
-    private static function normalizeSubId(string $subId): string
+    private static function normalizeSubId(#[\SensitiveParameter] string $subId): string
     {
         if (preg_match('//u', $subId) !== 1) {
             throw new InvalidArgumentException('sub_id: строка не в UTF-8');

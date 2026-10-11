@@ -45,7 +45,7 @@ final class DocumentCache
         return $age >= 0 && $age < $this->ttl;
     }
 
-    public function save(string $url, HttpResponse $response): bool
+    public function save(string $url, #[\SensitiveParameter] HttpResponse $response): bool
     {
         return $this->write($url, new CachedDocument(
             $response->body(),

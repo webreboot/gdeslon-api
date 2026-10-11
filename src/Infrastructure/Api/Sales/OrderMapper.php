@@ -23,7 +23,7 @@ final class OrderMapper
 
     private const DATE_PATTERN = '~^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$~';
 
-    public function toList(mixed $payload, OrderCriteria $criteria): OrderList
+    public function toList(#[\SensitiveParameter] mixed $payload, #[\SensitiveParameter] OrderCriteria $criteria): OrderList
     {
         if (!is_array($payload) || !array_is_list($payload)) {
             throw new UnexpectedResponseException(sprintf(

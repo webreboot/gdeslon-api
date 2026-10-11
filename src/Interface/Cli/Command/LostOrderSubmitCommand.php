@@ -165,7 +165,7 @@ final class LostOrderSubmitCommand extends BaseCommand
         return $code;
     }
 
-    private static function checkDuplicates(NewLostOrderClaim $claim, CommandContext $context): ?int
+    private static function checkDuplicates(#[\SensitiveParameter] NewLostOrderClaim $claim, CommandContext $context): ?int
     {
         $merchant = $claim->merchant()->value();
         $existing = $context->gdeslon()->lostOrders(new LostOrderCriteria(merchant: $merchant));

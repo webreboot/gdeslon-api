@@ -9,9 +9,13 @@ use Webreboot\GdeSlon\Domain\Claims\AttachmentType;
 use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Infrastructure\Claims\AttachmentFile;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class AttachmentFileTest extends TestCase
 {
+    use TraceSecrets;
+
     private string $dir;
 
     protected function setUp(): void
@@ -38,6 +42,19 @@ final class AttachmentFileTest extends TestCase
         self::assertSame(AttachmentType::Pdf, $attachment->type());
         self::assertSame('receipt.pdf', $attachment->fileName());
         self::assertSame("%PDF-1.4\nчек", $attachment->contents());
+    }
+
+    public function testLocalPathIsHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+        file_put_contents($this->dir . '/receipt.pdf', "PK\x03\x04" . PersonalDataMarkers::RECEIPT_MARK);
+        $missing = $this->dir . '/missing.pdf';
+
+        foreach ([$this->dir . '/receipt.pdf', $missing] as $path) {
+            $e = self::catchWithTraceArgs(static fn () => AttachmentFile::load($path), InvalidArgumentException::class);
+
+            self::assertTraceHidesSecrets($e, basename(dirname($this->dir)), basename($this->dir), PersonalDataMarkers::RECEIPT_MARK);
+        }
     }
 
     public function testRejected(): void

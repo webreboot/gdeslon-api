@@ -14,9 +14,13 @@ use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Domain\Sales\OrderType;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class OrderTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testFullOrder(): void
     {
         $transition = new \DateTimeImmutable('2026-09-01T10:00:00+03:00');
@@ -133,5 +137,17 @@ final class OrderTest extends TestCase
             static fn (): Order => new Order('1', 0, OrderState::New, OrderType::Product, new Money('1', 'RUB')),
             'магазина',
         ];
+    }
+
+    public function testInvalidOrderIsHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(
+            static fn () => new Order('1', 1, OrderState::New, OrderType::Product, new Money('1', 'RUB'), amount: new Money(PersonalDataMarkers::TOTAL, 'USD'), merchantOrderNumber: PersonalDataMarkers::ORDER, subId: PersonalDataMarkers::SUB, keywords: PersonalDataMarkers::MAIL),
+            InvalidArgumentException::class,
+        );
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::TOTAL, PersonalDataMarkers::ORDER, PersonalDataMarkers::SUB, PersonalDataMarkers::MAIL);
     }
 }

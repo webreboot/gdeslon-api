@@ -37,7 +37,7 @@ final class ClaimLabels
     /**
      * @return list<array{string, string|null}>
      */
-    public static function details(LostOrderClaim $claim): array
+    public static function details(#[\SensitiveParameter] LostOrderClaim $claim): array
     {
         return [
             ['ID заявки', (string) $claim->id()->value()],

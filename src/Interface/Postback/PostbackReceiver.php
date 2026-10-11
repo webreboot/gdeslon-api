@@ -93,7 +93,7 @@ final class PostbackReceiver
      *
      * @return array<string, string|NonScalarValue>
      */
-    private static function formParameters(array $form): array
+    private static function formParameters(#[\SensitiveParameter] array $form): array
     {
         $parameters = [];
         foreach ($form as $name => $value) {

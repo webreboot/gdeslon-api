@@ -14,9 +14,13 @@ use Webreboot\GdeSlon\Domain\Sales\OrderType;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\Sales\OrderMapper;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class OrderMapperTest extends TestCase
 {
+    use TraceSecrets;
+
     private const FORMAT = 'Y-m-d\TH:i:s.uP';
 
     public function testEmptyResponse(): void
@@ -213,6 +217,36 @@ final class OrderMapperTest extends TestCase
         $this->expectExceptionMessage('ни один заказ не разобран (2), первый: заказ #1');
 
         self::map([self::valid('1', ['state' => 9]), self::valid('2', ['currency' => 643])]);
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): mixed}>
+     */
+    public static function unparsedDocuments(): iterable
+    {
+        $broken = static fn (string $id): array => self::valid($id, [
+            'state' => 9,
+            'sub_id' => PersonalDataMarkers::SUB,
+            'merchant_order_id' => PersonalDataMarkers::ORDER,
+            'order_payment' => PersonalDataMarkers::TOTAL,
+            'keywords' => PersonalDataMarkers::MAIL,
+        ]);
+        yield 'ни один заказ не разобран' => [static fn (): array => [$broken('1'), $broken('2')]];
+        yield 'объект вместо массива' => [static fn (): array => ['sub_id' => PersonalDataMarkers::SUB, 'merchant_order_id' => PersonalDataMarkers::ORDER]];
+        yield 'строка вместо массива' => [static fn (): string => PersonalDataMarkers::MAIL . ' ' . PersonalDataMarkers::TOTAL];
+    }
+
+    /**
+     * @param \Closure(): mixed $payload
+     */
+    #[DataProvider('unparsedDocuments')]
+    public function testUnparsedDocumentIsHiddenFromTrace(\Closure $payload): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => (new OrderMapper())->toList($payload(), new OrderCriteria()), UnexpectedResponseException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB, PersonalDataMarkers::ORDER, PersonalDataMarkers::TOTAL, PersonalDataMarkers::MAIL);
     }
 
     #[DataProvider('notLists')]

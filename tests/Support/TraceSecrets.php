@@ -77,6 +77,28 @@ trait TraceSecrets
         }
     }
 
+    private static function assertNoFrame(\Throwable $e, string $function): void
+    {
+        for ($current = $e; $current !== null; $current = $current->getPrevious()) {
+            foreach ($current->getTrace() as $frame) {
+                Assert::assertFalse(
+                    !isset($frame['class']) && $frame['function'] === $function,
+                    sprintf('Кадр %s() в трассе %s', $function, $current::class),
+                );
+            }
+        }
+    }
+
+    private static function assertTraceArgsSmallerThan(\Throwable $e, int $bytes): void
+    {
+        $size = 0;
+        for ($current = $e; $current !== null; $current = $current->getPrevious()) {
+            $size += strlen(var_export(self::packageFrameArgs($current), true));
+        }
+
+        Assert::assertLessThan($bytes, $size, 'Аргументы трассы слишком велики');
+    }
+
     /**
      * @return list<array<mixed>>
      */

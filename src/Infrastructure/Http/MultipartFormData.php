@@ -34,14 +34,14 @@ final class MultipartFormData
         return new self($generator ?? static fn (): string => '----GdeSlon' . bin2hex(random_bytes(16)));
     }
 
-    public function withField(string $name, string $value): self
+    public function withField(string $name, #[\SensitiveParameter] string $value): self
     {
         self::assertHeaderValue($name, 'Имя поля', false);
 
         return $this->with(['name' => $name, 'value' => $value, 'fileName' => null, 'contentType' => null]);
     }
 
-    public function withFile(string $name, string $fileName, string $contentType, string $contents): self
+    public function withFile(string $name, string $fileName, string $contentType, #[\SensitiveParameter] string $contents): self
     {
         self::assertHeaderValue($name, 'Имя поля', false);
         self::assertHeaderValue($fileName, 'Имя файла', true);

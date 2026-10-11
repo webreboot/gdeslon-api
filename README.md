@@ -417,6 +417,17 @@ public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
 аргумент (`SensitiveParameterValue`), на 8.1 — если в ней запрос с токеном или ключом. Для логов и очередей берите
 `getMessage()` или `(string) $e`.
 
+Также на PHP 8.2+ скрыты данные покупателей и продаж: тела ответов API (заказы, заявки), новая заявка с чеком,
+фильтр sub_id, параметры и тело postback. Ошибка разбора JSON приходит без `getPrevious()`: в трассе `JsonException`
+было бы всё тело ответа, а текст ошибки JSON есть в сообщении. Сообщение может содержать значение, не прошедшее
+проверку (дату или сумму заявки, неверное поле postback), — учитывайте это, если логи доступны не только вам. Свой
+источник заявок (`LostOrderClaims`) или заказов (`OrderRepository`) помечайте так же — атрибут интерфейса не
+наследуется:
+
+```php
+public function submit(#[\SensitiveParameter] NewLostOrderClaim $claim): LostOrderClaim
+```
+
 ## CLI
 
 `vendor/bin/gdeslon` — команды поверх SDK с табличным выводом и стабильным JSON (`--format=json`). Ключи читаются

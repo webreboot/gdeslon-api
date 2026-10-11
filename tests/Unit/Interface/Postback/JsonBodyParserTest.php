@@ -10,9 +10,13 @@ use Webreboot\GdeSlon\Interface\Postback\InvalidPostbackException;
 use Webreboot\GdeSlon\Interface\Postback\JsonBodyParser;
 use Webreboot\GdeSlon\Interface\Postback\NonScalarValue;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class JsonBodyParserTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testFlatObject(): void
     {
         $fields = JsonBodyParser::parse('{"merchant_id":"2573","gs_order_id":900001,"profit":123.45,"big":123456789012345678901,"neg":-1.5,'
@@ -29,6 +33,51 @@ final class JsonBodyParserTest extends TestCase
         self::assertInstanceOf(NonScalarValue::class, $fields['flag']);
         self::assertInstanceOf(NonScalarValue::class, $fields['list']);
         self::assertInstanceOf(NonScalarValue::class, $fields['obj']);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function invalidJson(): iterable
+    {
+        $start = '{"sub_id":"' . PersonalDataMarkers::SUB . '","action_ip":"' . PersonalDataMarkers::IP . '"';
+        yield 'синтаксис' => [$start . ',', 'тело не JSON (Syntax error)'];
+        yield 'не UTF-8' => [$start . ",\"a\":\"\xff\"}", 'не в UTF-8'];
+        yield 'глубина' => [$start . ',"a":' . str_repeat('[', 9) . str_repeat(']', 9) . '}', 'вложен глубже 8'];
+    }
+
+    #[DataProvider('invalidJson')]
+    public function testInvalidJsonHasNoPrevious(string $body, string $message): void
+    {
+        $e = self::catchWithTraceArgs(static fn () => JsonBodyParser::parse($body), InvalidPostbackException::class);
+
+        self::assertStringContainsString($message, $e->getMessage());
+        self::assertNull($e->getPrevious());
+        self::assertNoFrame($e, 'json_decode');
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): string}>
+     */
+    public static function rejectedBodies(): iterable
+    {
+        $start = '{"sub_id":"' . PersonalDataMarkers::SUB . '","action_ip":"' . PersonalDataMarkers::IP . '","user_agent":"' . PersonalDataMarkers::UA . '"';
+        yield 'синтаксис' => [static fn (): string => $start . ','];
+        yield 'повтор ключа' => [static fn (): string => $start . ',"sub_id":"x"}'];
+        yield 'массив' => [static fn (): string => '[' . $start . '}]'];
+    }
+
+    /**
+     * @param \Closure(): string $body
+     */
+    #[DataProvider('rejectedBodies')]
+    public function testBodyIsHiddenFromTrace(\Closure $body): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => JsonBodyParser::parse($body()), InvalidPostbackException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB, PersonalDataMarkers::IP, PersonalDataMarkers::UA);
     }
 
     #[DataProvider('notObjects')]

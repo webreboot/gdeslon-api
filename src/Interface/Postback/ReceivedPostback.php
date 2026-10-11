@@ -13,6 +13,7 @@ final class ReceivedPostback
      * @param array<string, string|NonScalarValue> $parameters
      */
     public function __construct(
+        #[\SensitiveParameter]
         private readonly Conversion $conversion,
         private readonly PostbackFormat $format,
         private readonly array $warnings,

@@ -14,6 +14,7 @@ final class HttpResponse
      */
     public function __construct(
         private readonly int $statusCode,
+        #[\SensitiveParameter]
         private readonly string $body,
         array $headers,
     ) {

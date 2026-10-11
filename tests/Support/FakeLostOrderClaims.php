@@ -54,7 +54,7 @@ final class FakeLostOrderClaims implements LostOrderClaims
         $this->submitFailure = $failure;
     }
 
-    public function submit(NewLostOrderClaim $claim): LostOrderClaim
+    public function submit(#[\SensitiveParameter] NewLostOrderClaim $claim): LostOrderClaim
     {
         if ($this->submitFailure !== null) {
             throw $this->submitFailure;

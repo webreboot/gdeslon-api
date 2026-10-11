@@ -18,7 +18,7 @@ final class OrderList implements \IteratorAggregate, \Countable
      * @param iterable<Order> $orders
      * @param list<string>    $skipped
      */
-    public function __construct(private readonly OrderCriteria $criteria, iterable $orders, private readonly array $skipped = [])
+    public function __construct(#[\SensitiveParameter] private readonly OrderCriteria $criteria, #[\SensitiveParameter] iterable $orders, private readonly array $skipped = [])
     {
         foreach ($orders as $order) {
             $id = $order->id()->value();

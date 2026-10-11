@@ -11,9 +11,13 @@ use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimState;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderStatus;
 use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class ClaimValuesTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testClaimId(): void
     {
         $id = new LostOrderClaimId(5796);
@@ -69,6 +73,18 @@ final class ClaimValuesTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         OrderTotal::of($value);
+    }
+
+    public function testOrderTotalValueIsHiddenFromTraceArguments(): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => OrderTotal::of('ABC' . PersonalDataMarkers::TOTAL), InvalidArgumentException::class);
+
+        self::assertStringContainsString(PersonalDataMarkers::TOTAL, $e->getMessage());
+        $args = var_export(self::packageFrameArgs($e), true);
+        self::assertStringNotContainsString(PersonalDataMarkers::TOTAL, $args);
+        self::assertStringContainsString('SensitiveParameterValue', $args);
     }
 
     public function testNonFiniteOrderTotal(): void

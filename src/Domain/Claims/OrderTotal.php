@@ -12,7 +12,7 @@ final class OrderTotal
     {
     }
 
-    public static function of(string|int|float $value): self
+    public static function of(#[\SensitiveParameter] string|int|float $value): self
     {
         $decimal = match (true) {
             is_string($value) => trim($value),

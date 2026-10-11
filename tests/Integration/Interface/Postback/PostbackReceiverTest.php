@@ -18,6 +18,7 @@ use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
 use Webreboot\GdeSlon\Interface\Postback\QueryStringParser;
 use Webreboot\GdeSlon\Interface\Postback\ReceivedPostback;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
 use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class PostbackReceiverTest extends TestCase
@@ -234,6 +235,41 @@ final class PostbackReceiverTest extends TestCase
         } catch (InvalidPostbackException $e) {
             self::assertStringNotContainsString(self::SECRET, print_r($e->getTrace(), true));
         }
+    }
+
+    /**
+     * @return iterable<string, array{PostbackRequest}>
+     */
+    public static function rejectedConversions(): iterable
+    {
+        $fields = ['sub_id' => PersonalDataMarkers::SUB, 'action_ip' => PersonalDataMarkers::IP, 'user_agent' => PersonalDataMarkers::UA];
+        $json = ['Content-Type' => 'application/json'];
+        $xml = ['Content-Type' => 'application/xml'];
+        $object = json_encode($fields + ['merchant_id' => '2573'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $elements = '<sub_id>' . PersonalDataMarkers::SUB . '</sub_id><action_ip>' . PersonalDataMarkers::IP . '</action_ip><user_agent>' . PersonalDataMarkers::UA . '</user_agent>';
+        $query = http_build_query($fields + ['merchant_id' => '2573']);
+
+        yield 'JSON-массив' => [new PostbackRequest('POST', self::headers($json), '', '[' . $object . ']')];
+        yield 'JSON с повтором ключа' => [new PostbackRequest('POST', self::headers($json), '', substr($object, 0, -1) . ',"sub_id":"x"}')];
+        yield 'JSON обрезан' => [new PostbackRequest('POST', self::headers($json), '', substr($object, 0, -1) . ',')];
+        yield 'JSON без state' => [new PostbackRequest('POST', self::headers($json), '', $object)];
+        yield 'XML с DOCTYPE' => [new PostbackRequest('POST', self::headers($xml), '', '<!DOCTYPE r [<!ENTITY e "x">]><r>' . $elements . '</r>')];
+        yield 'XML с повтором элемента' => [new PostbackRequest('POST', self::headers($xml), '', '<r>' . $elements . '<sub_id>x</sub_id></r>')];
+        yield 'XML обрезан' => [new PostbackRequest('POST', self::headers($xml), '', '<r>' . $elements)];
+        yield 'GET с повтором sub_id' => [new PostbackRequest('GET', self::headers(), $query . '&state=3&sub_id=x')];
+        yield 'GET без state' => [new PostbackRequest('GET', self::headers(), $query)];
+        yield 'GET с merchant_id не числом' => [new PostbackRequest('GET', self::headers(), str_replace('merchant_id=2573', 'merchant_id=abc', $query) . '&state=3')];
+        yield 'форма без state' => [new PostbackRequest('POST', self::headers(['Content-Type' => 'multipart/form-data; boundary=x']), '', '', $fields + ['merchant_id' => '2573'])];
+    }
+
+    #[DataProvider('rejectedConversions')]
+    public function testConversionDataIsHiddenFromTrace(PostbackRequest $request): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => self::receive($request), InvalidPostbackException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB, PersonalDataMarkers::IP, PersonalDataMarkers::UA, self::SECRET);
     }
 
     public function testSecretIsHiddenFromTraceArguments(): void

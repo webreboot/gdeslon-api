@@ -22,9 +22,13 @@ use Webreboot\GdeSlon\Infrastructure\Api\Sales\HttpOrderRepository;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 use Webreboot\GdeSlon\Tests\Support\FrozenClock;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class HttpOrderRepositoryTest extends TestCase
 {
+    use TraceSecrets;
+
     private const USER = '1234';
     private const KEY = 'test-api-key';
 
@@ -183,6 +187,41 @@ final class HttpOrderRepositoryTest extends TestCase
                 self::assertSame($error, $e);
             }
         }
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(FakeHttpTransport): FakeHttpTransport, class-string<\Throwable>}>
+     */
+    public static function salesFailures(): iterable
+    {
+        $orders = str_replace(['"blog"', '"A-1001"', '"1500.00"', '"купить чайник"'], [
+            '"' . PersonalDataMarkers::SUB . '"',
+            '"' . PersonalDataMarkers::ORDER . '"',
+            '"' . PersonalDataMarkers::TOTAL . '"',
+            '"' . PersonalDataMarkers::MAIL . '"',
+        ], Fixtures::read('orders/orders-synthetic.json'));
+        self::assertStringContainsString(PersonalDataMarkers::ORDER, $orders);
+
+        yield 'обрезанный JSON' => [static fn (FakeHttpTransport $t) => $t->willReturn(200, substr($orders, 0, (int) strpos($orders, PersonalDataMarkers::MAIL) + 40)), UnexpectedResponseException::class];
+        yield 'ни один заказ не разобран' => [static fn (FakeHttpTransport $t) => $t->willReturn(200, (string) preg_replace('/"state": "?\d+"?/', '"state": 9', $orders)), UnexpectedResponseException::class];
+        yield '500' => [static fn (FakeHttpTransport $t) => $t->willReturn(500, Fixtures::read('orders/error-500.html')), HttpException::class];
+        yield '401' => [static fn (FakeHttpTransport $t) => $t->willReturn(401, '{"detail":"Неверные учётные данные."}'), AuthenticationException::class];
+        yield 'ошибка соединения' => [static fn (FakeHttpTransport $t) => $t->willFail(7), TransportException::class];
+    }
+
+    /**
+     * @param \Closure(FakeHttpTransport): FakeHttpTransport $response
+     * @param class-string<\Throwable>                       $expected
+     */
+    #[DataProvider('salesFailures')]
+    public function testSalesDataIsHiddenFromTrace(\Closure $response, string $expected): void
+    {
+        self::requireSensitiveParameter();
+        $repository = self::repository($response(new FakeHttpTransport()));
+
+        $e = self::catchWithTraceArgs(static fn () => $repository->find(new OrderCriteria(subId: PersonalDataMarkers::SUB)), $expected);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::SUB, PersonalDataMarkers::ORDER, PersonalDataMarkers::TOTAL, PersonalDataMarkers::MAIL);
     }
 
     public function testCredentialsAreRequiredBeforeRequest(): void

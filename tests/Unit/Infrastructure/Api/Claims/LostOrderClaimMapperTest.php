@@ -14,9 +14,13 @@ use Webreboot\GdeSlon\Domain\Claims\LostOrderStatus;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\Claims\LostOrderClaimMapper;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class LostOrderClaimMapperTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testFullClaim(): void
     {
         $claim = self::claim(5796);
@@ -198,6 +202,88 @@ final class LostOrderClaimMapperTest extends TestCase
 
         self::assertSame('2026-07-16T00:00:00+03:00', self::map([$records[0]])->find(5796)?->orderDate()->format(DATE_ATOM));
         self::assertSame('2026-07-15T00:00:00+03:00', self::claim(5799)->orderDate()->format(DATE_ATOM), '+03:00 10:00 — день, а не момент');
+    }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed>}>
+     */
+    public static function brokenClaims(): iterable
+    {
+        $record = Fixtures::json('lost-orders/claim-synthetic.json');
+        self::assertIsArray($record);
+        $record = array_replace($record, [
+            'order_id' => PersonalDataMarkers::ORDER,
+            'order_total' => PersonalDataMarkers::TOTAL,
+            'description' => PersonalDataMarkers::MAIL,
+        ]);
+
+        yield 'битая дата заказа' => [array_replace($record, ['order_date' => '2026-02-31'])];
+        yield 'битая дата обновления' => [array_replace($record, ['order_updated_date' => 'вчера'])];
+        yield 'id 0' => [array_replace($record, ['id' => 0])];
+        yield 'неизвестный статус' => [array_replace($record, ['order_status' => 'zzz'])];
+    }
+
+    /**
+     * @param array<array-key, mixed> $record
+     */
+    #[DataProvider('brokenClaims')]
+    public function testStrictClaimErrorHasNoPrevious(array $record): void
+    {
+        try {
+            (new LostOrderClaimMapper())->toClaim($record);
+            self::fail('Ожидалось исключение');
+        } catch (UnexpectedResponseException $e) {
+            self::assertStringStartsWith('Ответ заявки: ', $e->getMessage());
+            self::assertNull($e->getPrevious());
+        }
+    }
+
+    /**
+     * @param array<array-key, mixed> $record
+     */
+    #[DataProvider('brokenClaims')]
+    public function testStrictClaimIsHiddenFromTrace(array $record): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => (new LostOrderClaimMapper())->toClaim($record), UnexpectedResponseException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::ORDER, PersonalDataMarkers::TOTAL, PersonalDataMarkers::MAIL);
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): mixed}>
+     */
+    public static function unparsedLists(): iterable
+    {
+        $records = array_map(static fn (int $id): array => [
+            'id' => $id,
+            'order_id' => PersonalDataMarkers::ORDER,
+            'order_date' => '2026-09-24',
+            'order_total' => PersonalDataMarkers::TOTAL,
+            'description' => PersonalDataMarkers::MAIL,
+            'merchant_id' => 2573,
+            'order_status' => 'zzz',
+            'ticket_state' => 'in_work',
+        ], [1, 2]);
+
+        yield 'ни одна заявка не разобрана' => [static fn (): array => $records];
+        yield 'следующая страница' => [static fn (): array => ['count' => 40, 'next' => 'https://gdeslon.ru/api/v1/lost-orders/?page=2', 'previous' => null, 'results' => $records]];
+        yield 'results не список' => [static fn (): array => ['results' => ['first' => $records[0]]]];
+        yield 'строка' => [static fn (): string => PersonalDataMarkers::ORDER . ' ' . PersonalDataMarkers::MAIL];
+    }
+
+    /**
+     * @param \Closure(): mixed $payload
+     */
+    #[DataProvider('unparsedLists')]
+    public function testUnparsedListIsHiddenFromTrace(\Closure $payload): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(static fn () => (new LostOrderClaimMapper())->toList($payload(), new LostOrderCriteria()), UnexpectedResponseException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::ORDER, PersonalDataMarkers::TOTAL, PersonalDataMarkers::MAIL);
     }
 
     public function testStrictClaimDoesNotLeakTotalThroughChain(): void

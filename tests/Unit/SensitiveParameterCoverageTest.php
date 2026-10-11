@@ -7,12 +7,28 @@ namespace Webreboot\GdeSlon\Tests\Unit;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
+use Webreboot\GdeSlon\Domain\Claims\LostOrderClaim;
+use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimList;
+use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
+use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
+use Webreboot\GdeSlon\Domain\Sales\Conversion;
+use Webreboot\GdeSlon\Domain\Sales\Order;
+use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
+use Webreboot\GdeSlon\Domain\Sales\OrderList;
+use Webreboot\GdeSlon\Infrastructure\Claims\AttachmentFile;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlErrorMapper;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
+use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
+use Webreboot\GdeSlon\Infrastructure\Http\MultipartFormData;
 use Webreboot\GdeSlon\Interface\Cli\EnvFile;
 use Webreboot\GdeSlon\Interface\Cli\Environment;
+use Webreboot\GdeSlon\Interface\Postback\ConversionMapper;
 use Webreboot\GdeSlon\Interface\Postback\HeaderSecret;
+use Webreboot\GdeSlon\Interface\Postback\PostbackReceiver;
 use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
+use Webreboot\GdeSlon\Interface\Postback\QueryStringParser;
+use Webreboot\GdeSlon\Interface\Postback\ReceivedPostback;
 
 final class SensitiveParameterCoverageTest extends TestCase
 {
@@ -20,29 +36,35 @@ final class SensitiveParameterCoverageTest extends TestCase
 
     private const SECRET_NAMES = '~^(?:token|apiToken|apiKey|userId|secret|secrets|password|authorization)$~i';
 
+    private const PERSONAL_DATA_TYPES = [
+        HttpResponse::class,
+        NewLostOrderClaim::class,
+        ClaimAttachment::class,
+        OrderCriteria::class,
+        LostOrderClaim::class,
+        LostOrderClaimList::class,
+        Order::class,
+        OrderList::class,
+        Conversion::class,
+        ReceivedPostback::class,
+    ];
+
+    private const PERSONAL_DATA_NAMES = '~^(?:body|json|xml|contents|payload)$~i';
+
     public function testSecretCarryingParametersAreMarked(): void
     {
-        $checked = 0;
-        $unmarked = [];
-        foreach (self::classes() as $class) {
-            foreach ($class->getMethods() as $method) {
-                if ($method->class !== $class->name) {
-                    continue;
-                }
-                foreach ($method->getParameters() as $parameter) {
-                    if (!self::carriesSecret($parameter)) {
-                        continue;
-                    }
-                    $checked++;
-                    if (!self::isMarked($parameter)) {
-                        $unmarked[] = sprintf('%s::%s($%s)', $class->name, $method->name, $parameter->name);
-                    }
-                }
-            }
-        }
+        [$checked, $unmarked] = self::scan(self::SECRET_TYPES, self::SECRET_NAMES);
 
         self::assertGreaterThan(30, $checked);
         self::assertSame([], $unmarked, "Параметры с секретом без #[\\SensitiveParameter]:\n" . implode("\n", $unmarked));
+    }
+
+    public function testPersonalDataParametersAreMarked(): void
+    {
+        [$checked, $unmarked] = self::scan(self::PERSONAL_DATA_TYPES, self::PERSONAL_DATA_NAMES);
+
+        self::assertGreaterThan(40, $checked);
+        self::assertSame([], $unmarked, "Параметры с персональными данными без #[\\SensitiveParameter]:\n" . implode("\n", $unmarked));
     }
 
     /**
@@ -66,10 +88,51 @@ final class SensitiveParameterCoverageTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{class-string, string, string}>
+     */
+    public static function explicitPersonalDataParameters(): iterable
+    {
+        foreach (['orderNumber', 'orderDate', 'orderTotal', 'description'] as $name) {
+            yield "NewLostOrderClaim::__construct \${$name}" => [NewLostOrderClaim::class, '__construct', $name];
+        }
+        yield 'NewLostOrderClaim::date $date' => [NewLostOrderClaim::class, 'date', 'date'];
+        yield 'NewLostOrderClaim::assertUtf8 $value' => [NewLostOrderClaim::class, 'assertUtf8', 'value'];
+        yield 'NewLostOrderClaim::assertLength $value' => [NewLostOrderClaim::class, 'assertLength', 'value'];
+        yield 'OrderTotal::of $value' => [OrderTotal::class, 'of', 'value'];
+        yield 'ClaimAttachment::fromContents $fileName' => [ClaimAttachment::class, 'fromContents', 'fileName'];
+        yield 'AttachmentFile::load $path' => [AttachmentFile::class, 'load', 'path'];
+        yield 'MultipartFormData::withField $value' => [MultipartFormData::class, 'withField', 'value'];
+        yield 'OrderCriteria::__construct $subId' => [OrderCriteria::class, '__construct', 'subId'];
+        yield 'OrderCriteria::normalizeSubId $subId' => [OrderCriteria::class, 'normalizeSubId', 'subId'];
+        foreach (['map', 'merchantId', 'state', 'required', 'parameter'] as $method) {
+            yield "ConversionMapper::{$method} \$parameters" => [ConversionMapper::class, $method, 'parameters'];
+        }
+        yield 'QueryStringParser::parse $query' => [QueryStringParser::class, 'parse', 'query'];
+        yield 'PostbackRequest::__construct $query' => [PostbackRequest::class, '__construct', 'query'];
+        yield 'PostbackRequest::__construct $form' => [PostbackRequest::class, '__construct', 'form'];
+        yield 'PostbackRequest::fromServer $post' => [PostbackRequest::class, 'fromServer', 'post'];
+        yield 'PostbackReceiver::formParameters $form' => [PostbackReceiver::class, 'formParameters', 'form'];
+        yield 'PostbackRequest::fromPsr7 $request' => [PostbackRequest::class, 'fromPsr7', 'request'];
+        yield 'OrderList::__construct $orders' => [OrderList::class, '__construct', 'orders'];
+        yield 'LostOrderClaimList::__construct $claims' => [LostOrderClaimList::class, '__construct', 'claims'];
+        foreach (['reward', 'amount', 'merchantOrderNumber', 'subId', 'keywords'] as $name) {
+            yield "Order::__construct \${$name}" => [Order::class, '__construct', $name];
+        }
+        foreach (['merchantOrderNumber', 'subIds', 'reward', 'orderSum', 'priceInCurrency', 'userAgent', 'clickId'] as $name) {
+            yield "Conversion::__construct \${$name}" => [Conversion::class, '__construct', $name];
+        }
+        yield 'Conversion::normalizeSubIds $subIds' => [Conversion::class, 'normalizeSubIds', 'subIds'];
+        foreach (['orderNumber', 'orderDate', 'orderTotal', 'description', 'attachmentUrl'] as $name) {
+            yield "LostOrderClaim::__construct \${$name}" => [LostOrderClaim::class, '__construct', $name];
+        }
+    }
+
+    /**
      * @param class-string $class
      */
     #[DataProvider('explicitParameters')]
-    public function testExplicitSecretParametersAreMarked(string $class, string $method, string $parameter): void
+    #[DataProvider('explicitPersonalDataParameters')]
+    public function testExplicitParametersAreMarked(string $class, string $method, string $parameter): void
     {
         $found = null;
         foreach ((new \ReflectionMethod($class, $method))->getParameters() as $candidate) {
@@ -91,6 +154,8 @@ final class SensitiveParameterCoverageTest extends TestCase
         self::assertStringContainsString('SensitiveParameterValue', (string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'));
 
         self::assertStringContainsString('PostbackRequest', $readme);
+        self::assertStringContainsString('#[\SensitiveParameter] NewLostOrderClaim $claim', $readme);
+        self::assertStringContainsString('JsonException', (string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'));
     }
 
     /**
@@ -112,16 +177,49 @@ final class SensitiveParameterCoverageTest extends TestCase
         }
     }
 
-    private static function carriesSecret(\ReflectionParameter $parameter): bool
+    /**
+     * @param list<class-string> $types
+     *
+     * @return array{int, list<string>}
+     */
+    private static function scan(array $types, string $names): array
     {
-        if (preg_match(self::SECRET_NAMES, $parameter->name) === 1) {
+        $checked = 0;
+        $unmarked = [];
+        foreach (self::classes() as $class) {
+            foreach ($class->getMethods() as $method) {
+                if ($method->class !== $class->name) {
+                    continue;
+                }
+                foreach ($method->getParameters() as $parameter) {
+                    if (!self::carries($parameter, $types, $names)) {
+                        continue;
+                    }
+                    $checked++;
+                    if (!self::isMarked($parameter)) {
+                        $unmarked[] = sprintf('%s::%s($%s)', $class->name, $method->name, $parameter->name);
+                    }
+                }
+            }
+        }
+
+        return [$checked, $unmarked];
+    }
+
+    /**
+     * @param list<class-string> $types
+     */
+    private static function carries(\ReflectionParameter $parameter, array $types, string $names): bool
+    {
+        $type = $parameter->getType();
+        $flag = $type instanceof \ReflectionNamedType && $type->getName() === 'bool';
+        if (!$flag && preg_match($names, $parameter->name) === 1) {
             return true;
         }
 
-        $type = $parameter->getType();
-        $types = $type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType ? $type->getTypes() : [$type];
-        foreach ($types as $single) {
-            if ($single instanceof \ReflectionNamedType && in_array($single->getName(), self::SECRET_TYPES, true)) {
+        $singles = $type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType ? $type->getTypes() : [$type];
+        foreach ($singles as $single) {
+            if ($single instanceof \ReflectionNamedType && in_array($single->getName(), $types, true)) {
                 return true;
             }
         }

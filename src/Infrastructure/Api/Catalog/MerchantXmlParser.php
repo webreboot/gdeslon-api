@@ -27,7 +27,7 @@ final class MerchantXmlParser
         $this->reader = new XmlRecordReader();
     }
 
-    public function parse(string $xml): MerchantList
+    public function parse(#[\SensitiveParameter] string $xml): MerchantList
     {
         $records = $this->reader->read($xml, 'магазинов', ['shops', 'shop'], fn (\SimpleXMLElement $shop): Merchant => $this->toMerchant($shop));
 

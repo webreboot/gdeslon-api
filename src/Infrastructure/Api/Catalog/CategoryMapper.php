@@ -13,7 +13,7 @@ use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 /** @internal */
 final class CategoryMapper
 {
-    public function toTree(mixed $payload): CategoryTree
+    public function toTree(#[\SensitiveParameter] mixed $payload): CategoryTree
     {
         if (!is_array($payload)) {
             throw new UnexpectedResponseException(sprintf(

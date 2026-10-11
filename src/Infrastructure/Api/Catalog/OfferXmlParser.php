@@ -31,7 +31,7 @@ final class OfferXmlParser
         $this->reader = new XmlRecordReader();
     }
 
-    public function parse(string $xml, SearchCriteria $criteria): SearchResult
+    public function parse(#[\SensitiveParameter] string $xml, SearchCriteria $criteria): SearchResult
     {
         $records = $this->reader->read(
             $xml,

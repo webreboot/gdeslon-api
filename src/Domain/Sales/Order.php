@@ -27,9 +27,13 @@ final class Order
         int|MerchantId $merchantId,
         private readonly OrderState $state,
         private readonly OrderType $type,
+        #[\SensitiveParameter]
         private readonly Money $reward,
+        #[\SensitiveParameter]
         private readonly ?Money $amount = null,
+        #[\SensitiveParameter]
         ?string $merchantOrderNumber = null,
+        #[\SensitiveParameter]
         ?string $subId = null,
         ?string $merchantName = null,
         private readonly ?int $affiliateId = null,
@@ -39,6 +43,7 @@ final class Order
         private readonly ?\DateTimeImmutable $lastUpdatedAt = null,
         private readonly ?\DateTimeImmutable $confirmedAt = null,
         private readonly ?\DateTimeImmutable $accruedAt = null,
+        #[\SensitiveParameter]
         ?string $keywords = null,
     ) {
         $this->id = is_string($id) ? new OrderId($id) : $id;

@@ -14,9 +14,13 @@ use Webreboot\GdeSlon\Domain\Claims\LostOrderCriteria;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderStatus;
 use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class LostOrderClaimListTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testClaim(): void
     {
         $updated = new \DateTimeImmutable('2026-10-01T00:00:00+03:00');
@@ -133,5 +137,27 @@ final class LostOrderClaimListTest extends TestCase
         LostOrderClaimState $state = LostOrderClaimState::InWork,
     ): LostOrderClaim {
         return new LostOrderClaim($id, $number, new \DateTimeImmutable('2026-09-24'), OrderTotal::of('1'), $merchant, $status, $state);
+    }
+
+    public function testDuplicateClaimsAreHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+        $claim = new LostOrderClaim(5, PersonalDataMarkers::ORDER, new \DateTimeImmutable('2026-09-24'), OrderTotal::of(PersonalDataMarkers::TOTAL), 2573, LostOrderStatus::Waiting, LostOrderClaimState::InWork, description: PersonalDataMarkers::MAIL);
+
+        $e = self::catchWithTraceArgs(static fn () => new LostOrderClaimList(new LostOrderCriteria(), [$claim, $claim]), InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::ORDER, PersonalDataMarkers::TOTAL, PersonalDataMarkers::MAIL);
+    }
+
+    public function testInvalidClaimIsHiddenFromTrace(): void
+    {
+        self::requireSensitiveParameter();
+
+        $e = self::catchWithTraceArgs(
+            static fn () => new LostOrderClaim(0, PersonalDataMarkers::ORDER, new \DateTimeImmutable('2026-09-24'), OrderTotal::of(PersonalDataMarkers::TOTAL), 2573, LostOrderStatus::Waiting, LostOrderClaimState::InWork, description: PersonalDataMarkers::MAIL),
+            InvalidArgumentException::class,
+        );
+
+        self::assertTraceHidesSecrets($e, PersonalDataMarkers::ORDER, PersonalDataMarkers::TOTAL, PersonalDataMarkers::MAIL);
     }
 }

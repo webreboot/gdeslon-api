@@ -16,7 +16,7 @@ enum AttachmentType: string
         'pdf' => '%PDF-',
     ];
 
-    public static function detect(string $contents): ?self
+    public static function detect(#[\SensitiveParameter] string $contents): ?self
     {
         foreach (self::SIGNATURES as $type => $signature) {
             if (str_starts_with($contents, $signature)) {

@@ -55,7 +55,7 @@ final class LostOrderCriteria
         return $this->orderStatus;
     }
 
-    public function matches(LostOrderClaim $claim): bool
+    public function matches(#[\SensitiveParameter] LostOrderClaim $claim): bool
     {
         return ($this->merchant === null || $this->merchant->equals($claim->merchantId()))
             && ($this->claimState === null || $this->claimState === $claim->claimState())

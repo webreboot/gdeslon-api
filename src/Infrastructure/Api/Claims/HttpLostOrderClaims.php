@@ -99,7 +99,7 @@ final class HttpLostOrderClaims implements LostOrderClaims
         return $claim;
     }
 
-    public function submit(NewLostOrderClaim $claim): LostOrderClaim
+    public function submit(#[\SensitiveParameter] NewLostOrderClaim $claim): LostOrderClaim
     {
         $headers = $this->headers();
         $claim->assertOrderDateWithin($this->clock->now()->setTimezone(new \DateTimeZone(self::TIMEZONE)));
@@ -184,7 +184,7 @@ final class HttpLostOrderClaims implements LostOrderClaims
         return ['Authorization' => 'Bearer ' . $this->token, 'Accept' => 'application/json'];
     }
 
-    private function validationError(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): HttpException
+    private function validationError(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response): HttpException
     {
         $errors = $this->mapper->errors($response->body());
         if ($errors === null) {
@@ -201,7 +201,7 @@ final class HttpLostOrderClaims implements LostOrderClaims
         );
     }
 
-    private static function httpError(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): HttpException
+    private static function httpError(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response): HttpException
     {
         return new HttpException(
             sprintf('%s %s: HTTP %d', $request->method(), $request->maskedUri(), $response->statusCode()),

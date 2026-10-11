@@ -12,6 +12,7 @@ final class CachedDocument
     private const FORMAT_VERSION = 1;
 
     public function __construct(
+        #[\SensitiveParameter]
         private readonly string $body,
         private readonly ?string $etag,
         private readonly ?string $lastModified,

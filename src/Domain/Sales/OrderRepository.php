@@ -11,5 +11,5 @@ interface OrderRepository
     /**
      * @throws GdeSlonException
      */
-    public function find(OrderCriteria $criteria): OrderList;
+    public function find(#[\SensitiveParameter] OrderCriteria $criteria): OrderList;
 }

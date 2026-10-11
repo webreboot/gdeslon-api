@@ -21,8 +21,11 @@ final class PostbackRequest
         string $method,
         #[\SensitiveParameter]
         array $headers = [],
+        #[\SensitiveParameter]
         private readonly string $query = '',
+        #[\SensitiveParameter]
         private readonly string $body = '',
+        #[\SensitiveParameter]
         private readonly ?array $form = null,
     ) {
         $this->method = strtoupper(trim($method));
@@ -61,7 +64,7 @@ final class PostbackRequest
      *
      * @throws InvalidPostbackException
      */
-    public static function fromServer(#[\SensitiveParameter] array $server, array $post = [], $input = null, int $maxBodyBytes = PostbackReceiver::DEFAULT_MAX_BODY_BYTES): self
+    public static function fromServer(#[\SensitiveParameter] array $server, #[\SensitiveParameter] array $post = [], $input = null, int $maxBodyBytes = PostbackReceiver::DEFAULT_MAX_BODY_BYTES): self
     {
         $headers = [];
         foreach ($server as $key => $value) {

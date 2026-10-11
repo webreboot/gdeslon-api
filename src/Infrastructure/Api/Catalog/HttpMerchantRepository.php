@@ -42,7 +42,7 @@ final class HttpMerchantRepository implements MerchantRepository
         return $this->loader->load(
             $request,
             $this->url . '#' . hash('sha256', $this->token ?? ''),
-            fn (HttpResponse $response): MerchantList => $this->toList($request, $response),
+            fn (#[\SensitiveParameter] HttpResponse $response): MerchantList => $this->toList($request, $response),
             static fn (MerchantList $list): bool => $list->skipped() === [],
         );
     }
@@ -67,7 +67,7 @@ final class HttpMerchantRepository implements MerchantRepository
         return ['url' => $this->url, 'token' => $this->token === null ? null : '***'];
     }
 
-    private function toList(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): MerchantList
+    private function toList(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response): MerchantList
     {
         $list = $this->parser->parse($response->body());
 

@@ -13,7 +13,7 @@ final class FakeOrderRepository implements OrderRepository
     /** @var list<OrderCriteria> */
     private array $criteria = [];
 
-    public function find(OrderCriteria $criteria): OrderList
+    public function find(#[\SensitiveParameter] OrderCriteria $criteria): OrderList
     {
         $this->criteria[] = $criteria;
 

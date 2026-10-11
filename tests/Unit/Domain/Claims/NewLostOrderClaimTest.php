@@ -11,9 +11,13 @@ use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
+use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class NewLostOrderClaimTest extends TestCase
 {
+    use TraceSecrets;
+
     public function testFullClaim(): void
     {
         $attachment = self::attachment();
@@ -106,6 +110,46 @@ final class NewLostOrderClaimTest extends TestCase
         } catch (InvalidArgumentException $e) {
             self::assertStringContainsString($date, $e->getMessage());
         }
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(ClaimAttachment): NewLostOrderClaim}>
+     */
+    public static function rejectedClaims(): iterable
+    {
+        $description = PersonalDataMarkers::MAIL . ' ' . PersonalDataMarkers::PHONE;
+        $order = PersonalDataMarkers::ORDER;
+        $total = PersonalDataMarkers::TOTAL;
+
+        yield 'управляющий символ в номере' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim("A\x01" . $order, '2026-09-24', $total, 2573, $a, $description)];
+        yield 'номер не UTF-8' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim("\xff" . $order, '2026-09-24', $total, 2573, $a, $description)];
+        yield 'длинное описание' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim($order, '2026-09-24', $total, 2573, $a, $description . str_repeat('я', 255))];
+        yield 'описание не UTF-8' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim($order, '2026-09-24', $total, 2573, $a, "\xff" . $description)];
+        yield 'несуществующая дата' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim($order, '2026-02-31', $total, 2573, $a, $description)];
+        yield 'сумма с тремя знаками' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim($order, '2026-09-24', '12.345', 2573, $a, $description)];
+        yield 'сумма с шумом float' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim($order, '2026-09-24', 0.1 + 0.2, 2573, $a, $description)];
+        yield 'магазин 0' => [static fn (ClaimAttachment $a) => new NewLostOrderClaim($order, '2026-09-24', $total, 0, $a, $description)];
+    }
+
+    /**
+     * @param \Closure(ClaimAttachment): NewLostOrderClaim $create
+     */
+    #[DataProvider('rejectedClaims')]
+    public function testValidationErrorsHideClaimFromTrace(\Closure $create): void
+    {
+        self::requireSensitiveParameter();
+        $attachment = ClaimAttachment::fromContents('receipt.pdf', PersonalDataMarkers::RECEIPT);
+
+        $e = self::catchWithTraceArgs(static fn () => $create($attachment), InvalidArgumentException::class);
+
+        self::assertTraceHidesSecrets(
+            $e,
+            PersonalDataMarkers::ORDER,
+            PersonalDataMarkers::TOTAL,
+            PersonalDataMarkers::MAIL,
+            PersonalDataMarkers::PHONE,
+            PersonalDataMarkers::RECEIPT_MARK,
+        );
     }
 
     private static function claim(string $date): NewLostOrderClaim

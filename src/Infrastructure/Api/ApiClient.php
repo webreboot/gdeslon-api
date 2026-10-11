@@ -37,7 +37,7 @@ final class ApiClient
         return $this->send($request, array_values(array_diff($statuses, [401, 403])));
     }
 
-    public static function maskedSnippet(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): string
+    public static function maskedSnippet(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response): string
     {
         $body = SecretMasker::maskValues($response->body(), SecretMasker::secretValues($request));
 
@@ -49,18 +49,19 @@ final class ApiClient
         return $this->send($request, [304]);
     }
 
-    public function decodeJson(#[\SensitiveParameter] HttpRequest $request, HttpResponse $response): mixed
+    public function decodeJson(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response): mixed
     {
         try {
             return json_decode($response->body(), true, 512, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
         } catch (\JsonException $e) {
+            // без previous: в аргументах кадра json_decode() в трассе JsonException — всё тело ответа
             throw new UnexpectedResponseException(sprintf(
                 '%s %s: ответ не является корректным JSON (получено %d байт): %s',
                 $request->method(),
                 $request->maskedUri(),
                 strlen($response->body()),
                 $e->getMessage(),
-            ), $e);
+            ));
         }
     }
 
@@ -96,7 +97,7 @@ final class ApiClient
         );
     }
 
-    private static function snippet(string $body): string
+    private static function snippet(#[\SensitiveParameter] string $body): string
     {
         $snippet = substr($body, 0, self::SNIPPET_BYTES);
         if (preg_match('//u', $body) !== 1) {
