@@ -60,11 +60,11 @@ final class PublicApiTest extends TestCase
         self::assertStringContainsString('`TransportFactory`', $compatibility);
         self::assertStringContainsString('`SystemClock`', $compatibility);
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
-        self::assertStringContainsString('`TransportFactory`', $unreleased);
-        self::assertStringContainsString('`SystemClock`', $unreleased);
-        self::assertStringContainsString('inner:', $unreleased);
-        self::assertStringContainsString('rangeHosts', $unreleased);
+        $release = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.2.0] — 2026-10-11');
+        self::assertStringContainsString('`TransportFactory`', $release);
+        self::assertStringContainsString('`SystemClock`', $release);
+        self::assertStringContainsString('inner:', $release);
+        self::assertStringContainsString('rangeHosts', $release);
     }
 
     public function testReadmeDocumentsTesting(): void
@@ -98,10 +98,10 @@ final class PublicApiTest extends TestCase
         self::assertStringContainsString('Testing/', self::section($readme, '## Архитектура'));
         self::assertStringContainsString('src/Testing', self::section($readme, '## Разработка'));
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
-        self::assertStringContainsString('`Webreboot\GdeSlon\Testing`', $unreleased);
+        $release = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.2.0] — 2026-10-11');
+        self::assertStringContainsString('`Webreboot\GdeSlon\Testing`', $release);
         foreach (['FakeHttpTransport', 'FrozenClock', 'InMemoryCacheStore', 'FakeLostOrderClaims'] as $class) {
-            self::assertStringContainsString($class, $unreleased);
+            self::assertStringContainsString($class, $release);
         }
     }
 
