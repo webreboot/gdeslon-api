@@ -138,7 +138,11 @@ final class McpToolsTest extends TestCase
         self::assertSame([], $data['offers']);
         self::assertNull($data['next_page']);
 
-        foreach ([['limit' => 101], ['page' => 0], ['page' => 1001, 'limit' => 10], ['sort' => 'partner-benefit'], ['merchant_ids' => [0]]] as $arguments) {
+        foreach ([['limit' => 101], ['page' => 0], ['page' => 1001, 'limit' => 10], ['sort' => 'partner-benefit'], ['merchant_ids' => [0]],
+            ['limit' => 101, 'category_ids' => [1113], 'include_subcategories' => true],
+            ['page' => 1001, 'limit' => 10, 'category_ids' => [1113], 'include_subcategories' => true],
+            ['parked_domain' => 'ftp://x', 'category_ids' => [1113], 'include_subcategories' => true],
+            ['merchant_ids' => [5], 'exclude_merchant_ids' => [5], 'category_ids' => [1113], 'include_subcategories' => true]] as $arguments) {
             $mcp = new McpTester();
             self::assertStringStartsWith('[invalid_arguments] ', McpTester::failure($mcp->call('search_offers', $arguments, self::TOKEN)), (string) json_encode($arguments));
             self::assertSame([], $mcp->cli->transport->requests());
@@ -148,6 +152,126 @@ final class McpToolsTest extends TestCase
         $mcp = self::mcp(404, "There have been validation errors: [ { param: '_gs_at', msg: 'Invalid value', value: 'secret-token-0123' } ]");
         self::assertStringStartsWith('[access] ', McpTester::failure($mcp->call('search_offers', [], self::TOKEN)), 'SDK переводит эхо _gs_at в AuthenticationException');
         self::assertStringNotContainsString('secret-token-0123', $mcp->cli->stdout . $mcp->cli->stderr);
+    }
+
+    public function testSearchWithSubcategoriesExpandsIncludedAndExcluded(): void
+    {
+        $mcp = self::categoriesThenSearch();
+        $data = McpTester::structured($mcp->call('search_offers', [
+            'query' => 'тренч', 'category_ids' => [1113], 'exclude_category_ids' => [1216], 'include_subcategories' => true,
+        ], self::TOKEN));
+
+        $requests = $mcp->cli->transport->requests();
+        self::assertCount(2, $requests);
+        self::assertSame('https://api.gdeslon.ru/gdeslon-categories.json', $requests[0]->url());
+        $query = $requests[1]->query();
+        self::assertSame('1113,1114,1128,1522', $query['tid'] ?? null);
+        self::assertArrayNotHasKey('no_tid', $query, 'исключённые уже вычтены из tid');
+        self::assertSame('тренч', $query['q'] ?? null);
+        self::assertCount(7, (array) $data['offers']);
+    }
+
+    public function testSearchWithSubcategoriesExclusionWins(): void
+    {
+        $mcp = self::categoriesThenSearch();
+        McpTester::structured($mcp->call('search_offers', [
+            'category_ids' => [1216, 1231], 'exclude_category_ids' => [1230, 1231], 'include_subcategories' => true,
+        ], self::TOKEN));
+
+        $query = $mcp->cli->transport->lastRequest()->query();
+        self::assertSame('1216,1217', $query['tid'] ?? null);
+        self::assertArrayNotHasKey('no_tid', $query);
+    }
+
+    public function testSearchWithSubcategoriesOnlyExcluded(): void
+    {
+        $mcp = self::categoriesThenSearch();
+        McpTester::structured($mcp->call('search_offers', ['exclude_category_ids' => [1230], 'include_subcategories' => true], self::TOKEN));
+
+        $query = $mcp->cli->transport->lastRequest()->query();
+        self::assertArrayNotHasKey('tid', $query);
+        self::assertSame('1230,1231,1232', $query['no_tid'] ?? null);
+    }
+
+    public function testSearchWithSubcategoriesWhenEverythingIsExcluded(): void
+    {
+        $mcp = self::mcp(200, Fixtures::read('categories/categories.json'));
+        $text = McpTester::failure($mcp->call('search_offers', [
+            'category_ids' => [1216], 'exclude_category_ids' => [1113], 'include_subcategories' => true,
+        ], self::TOKEN));
+
+        self::assertStringStartsWith('[invalid_arguments] ', $text);
+        self::assertStringContainsString('исключены', $text);
+        self::assertCount(1, $mcp->cli->transport->requests(), 'поиск без tid расширил бы выдачу');
+    }
+
+    public function testSearchWithSubcategoriesUnknownCategoryIsNotFound(): void
+    {
+        foreach ([[999999, ['category_ids' => [1113, 999999]]], [277, ['category_ids' => [1113], 'exclude_category_ids' => [277]]]] as [$missing, $arguments]) {
+            $mcp = self::mcp(200, Fixtures::read('categories/categories.json'));
+
+            $text = McpTester::failure($mcp->call('search_offers', $arguments + ['include_subcategories' => true], self::TOKEN));
+
+            self::assertSame(sprintf('[not_found] Категории %d нет', $missing), $text);
+            self::assertCount(1, $mcp->cli->transport->requests(), 'поиск не идёт');
+        }
+    }
+
+    public function testSearchWithSubcategoriesWithoutCategoryListsDoesNotLoadCategories(): void
+    {
+        $mcp = self::mcp(200, Fixtures::read('search/search.xml'));
+        McpTester::structured($mcp->call('search_offers', ['query' => 'тренч', 'merchant_ids' => [107054], 'include_subcategories' => true], self::TOKEN));
+
+        self::assertCount(1, $mcp->cli->transport->requests());
+        self::assertSame('https://api.gdeslon.ru/api/search.xml', $mcp->cli->transport->lastRequest()->url());
+        self::assertArrayNotHasKey('tid', $mcp->cli->transport->lastRequest()->query());
+    }
+
+    public function testSearchWithoutSubcategoriesKeepsCategoriesAsIs(): void
+    {
+        foreach ([[], ['include_subcategories' => false]] as $flag) {
+            $mcp = self::mcp(200, Fixtures::read('search/search.xml'));
+            McpTester::structured($mcp->call('search_offers', ['category_ids' => [1113], 'exclude_category_ids' => [1216]] + $flag, self::TOKEN));
+
+            self::assertCount(1, $mcp->cli->transport->requests());
+            self::assertSame('1113', $mcp->cli->transport->lastRequest()->query()['tid'] ?? null);
+            self::assertSame('1216', $mcp->cli->transport->lastRequest()->query()['no_tid'] ?? null);
+        }
+
+        $mcp = new McpTester();
+        self::assertStringStartsWith('[invalid_arguments] ', McpTester::failure($mcp->call('search_offers', ['category_ids' => [1113], 'exclude_category_ids' => [1113]], self::TOKEN)));
+    }
+
+    public function testSearchWithSubcategoriesCategoriesFailure(): void
+    {
+        $mcp = self::mcp(500, 'Something broken!');
+
+        self::assertStringStartsWith('[failed] ', McpTester::failure($mcp->call('search_offers', ['category_ids' => [1113], 'include_subcategories' => true], self::TOKEN)));
+        self::assertCount(1, $mcp->cli->transport->requests());
+        self::assertSame('https://api.gdeslon.ru/gdeslon-categories.json', $mcp->cli->transport->lastRequest()->url());
+    }
+
+    public function testIncludeSubcategoriesMustBeBoolean(): void
+    {
+        foreach (['yes', 1, 'true', []] as $value) {
+            $mcp = new McpTester();
+            $text = McpTester::failure($mcp->call('search_offers', ['category_ids' => [1113], 'include_subcategories' => $value], self::TOKEN));
+
+            self::assertStringStartsWith('[invalid_arguments] ', $text);
+            self::assertStringContainsString('include_subcategories', $text);
+            self::assertSame([], $mcp->cli->transport->requests());
+        }
+
+        $mcp = new McpTester();
+        $mcp->send([McpTester::initialize(), ['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list']]);
+        $tools = (array) McpTester::result($mcp->responses[1])['tools'];
+        $search = array_values(array_filter($tools, static fn (mixed $tool): bool => is_array($tool) && $tool['name'] === 'search_offers'))[0] ?? null;
+        self::assertIsArray($search);
+        self::assertIsArray($search['inputSchema']);
+        self::assertIsArray($search['inputSchema']['properties']);
+        self::assertIsArray($search['inputSchema']['properties']['include_subcategories']);
+        self::assertSame('boolean', $search['inputSchema']['properties']['include_subcategories']['type']);
+        self::assertFalse($search['inputSchema']['properties']['include_subcategories']['default']);
     }
 
     public function testOrders(): void
@@ -262,6 +386,13 @@ final class McpToolsTest extends TestCase
     private static function mcp(int $status, string $body): McpTester
     {
         return new McpTester((new FakeHttpTransport())->willReturn($status, $body));
+    }
+
+    private static function categoriesThenSearch(): McpTester
+    {
+        return new McpTester((new FakeHttpTransport())
+            ->willReturn(200, Fixtures::read('categories/categories.json'))
+            ->willReturn(200, Fixtures::read('search/search.xml')));
     }
 
     /**

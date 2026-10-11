@@ -185,7 +185,10 @@ final class CatalogCommandsTest extends TestCase
 
     public function testSearchInvalidCriteria(): void
     {
-        foreach ([['--limit=101'], ['--limit=0'], ['--page=0'], ['--page=1001', '--limit=10'], ['--sort=foo'], ['--merchant=0'], ['-pink']] as $options) {
+        foreach ([['--limit=101'], ['--limit=0'], ['--page=0'], ['--page=1001', '--limit=10'], ['--sort=foo'], ['--merchant=0'], ['-pink'],
+            ['--limit=abc', '--category=1113', '--subcategories'], ['--limit=101', '--category=1113', '--subcategories'], ['--sort=foo', '--category=1113', '--subcategories'],
+            ['--page=1001', '--limit=10', '--category=1113', '--subcategories'], ['--parked-domain=foo', '--category=1113', '--subcategories'],
+            ['--merchant=5', '--exclude-merchant=5', '--category=1113', '--subcategories']] as $options) {
             $cli = new CliTester();
             self::assertSame(2, $cli->run(['search', 'x', ...$options], self::TOKEN), implode(' ', $options));
             self::assertSame([], $cli->transport->requests());
@@ -200,6 +203,107 @@ final class CatalogCommandsTest extends TestCase
         $cli = self::cli(404, "There have been validation errors: [ { param: '_gs_at', msg: 'Invalid value', value: 'secret-token-0123' } ]");
         self::assertSame(3, $cli->run(['search', 'x'], self::TOKEN));
         self::assertStringNotContainsString('secret-token-0123', $cli->stdout . $cli->stderr);
+    }
+
+    public function testSearchWithSubcategoriesExpandsIncludedAndExcluded(): void
+    {
+        $cli = self::categoriesThenSearch();
+
+        self::assertSame(0, $cli->run(['search', 'тренч', '--category=1113', '--exclude-category=1216', '--subcategories', '--no-cache'], self::TOKEN), $cli->stderr);
+
+        $requests = $cli->transport->requests();
+        self::assertCount(2, $requests);
+        self::assertSame('https://api.gdeslon.ru/gdeslon-categories.json', $requests[0]->url());
+        $query = $requests[1]->query();
+        self::assertSame('1113,1114,1128,1522', $query['tid'] ?? null);
+        self::assertArrayNotHasKey('no_tid', $query, 'исключённые уже вычтены из tid');
+        self::assertSame('тренч', $query['q'] ?? null);
+        self::assertStringContainsString('Страница 1', $cli->stdout);
+    }
+
+    public function testSearchWithSubcategoriesExclusionWins(): void
+    {
+        $cli = self::categoriesThenSearch();
+
+        self::assertSame(0, $cli->run(['search', '--category=1216,1231', '--exclude-category=1230,1231', '--subcategories', '--no-cache'], self::TOKEN), $cli->stderr);
+
+        $query = $cli->transport->lastRequest()->query();
+        self::assertSame('1216,1217', $query['tid'] ?? null);
+        self::assertArrayNotHasKey('no_tid', $query);
+    }
+
+    public function testSearchWithSubcategoriesOnlyExcluded(): void
+    {
+        $cli = self::categoriesThenSearch();
+
+        self::assertSame(0, $cli->run(['search', '--exclude-category=1230', '--subcategories', '--no-cache'], self::TOKEN), $cli->stderr);
+
+        $query = $cli->transport->lastRequest()->query();
+        self::assertArrayNotHasKey('tid', $query);
+        self::assertSame('1230,1231,1232', $query['no_tid'] ?? null);
+    }
+
+    public function testSearchWithSubcategoriesWhenEverythingIsExcluded(): void
+    {
+        $cli = self::cli(200, Fixtures::read('categories/categories.json'));
+
+        self::assertSame(2, $cli->run(['search', '--category=1216', '--exclude-category=1113', '--subcategories', '--no-cache'], self::TOKEN));
+        self::assertStringContainsString('исключены', $cli->stderr);
+        self::assertSame('', $cli->stdout);
+        self::assertCount(1, $cli->transport->requests());
+    }
+
+    public function testSearchWithSubcategoriesUnknownCategory(): void
+    {
+        foreach ([999999 => ['--category=1113,999999'], 277 => ['--category=1113', '--exclude-category=277']] as $missing => $options) {
+            $cli = self::cli(200, Fixtures::read('categories/categories.json'));
+
+            self::assertSame(1, $cli->run(['search', ...$options, '--subcategories', '--no-cache'], self::TOKEN));
+            self::assertSame(sprintf("Категории %d нет\n", $missing), $cli->stderr);
+            self::assertSame('', $cli->stdout);
+            self::assertCount(1, $cli->transport->requests(), 'поиск не идёт');
+        }
+    }
+
+    public function testSearchWithSubcategoriesWithoutCategoriesDoesNotLoadThem(): void
+    {
+        $cli = self::cli(200, Fixtures::read('search/search.xml'));
+
+        self::assertSame(0, $cli->run(['search', 'тренч', '--merchant=107054', '--subcategories'], self::TOKEN), $cli->stderr);
+        self::assertCount(1, $cli->transport->requests());
+        self::assertSame('https://api.gdeslon.ru/api/search.xml', $cli->transport->lastRequest()->url());
+        self::assertArrayNotHasKey('tid', $cli->transport->lastRequest()->query());
+    }
+
+    public function testSearchWithoutSubcategoriesKeepsCategoriesAsIs(): void
+    {
+        $cli = self::cli(200, Fixtures::read('search/search.xml'));
+
+        self::assertSame(0, $cli->run(['search', '--category=1113', '--exclude-category=1216'], self::TOKEN), $cli->stderr);
+        self::assertCount(1, $cli->transport->requests());
+        self::assertSame('1113', $cli->transport->lastRequest()->query()['tid'] ?? null);
+        self::assertSame('1216', $cli->transport->lastRequest()->query()['no_tid'] ?? null);
+    }
+
+    public function testSearchWithSubcategoriesCategoriesFailure(): void
+    {
+        $cli = self::cli(500, 'Something broken!');
+
+        self::assertSame(1, $cli->run(['search', '--category=1113', '--subcategories', '--no-cache'], self::TOKEN));
+        self::assertStringStartsWith('Ошибка: ', $cli->stderr);
+        self::assertCount(1, $cli->transport->requests());
+        self::assertSame('https://api.gdeslon.ru/gdeslon-categories.json', $cli->transport->lastRequest()->url());
+    }
+
+    public function testSearchSubcategoriesIsFlagInHelp(): void
+    {
+        $cli = new CliTester();
+        self::assertSame(0, $cli->run(['search', '--help']));
+        self::assertStringContainsString('--subcategories', $cli->stdout);
+
+        $cli = new CliTester();
+        self::assertSame(2, $cli->run(['search', '--category=1113', '--subcategories=yes'], self::TOKEN));
+        self::assertSame([], $cli->transport->requests());
     }
 
     public function testPageOfZeroPricesShowsNextPage(): void
@@ -221,6 +325,13 @@ final class CatalogCommandsTest extends TestCase
     private static function cli(int $status, string $body): CliTester
     {
         return new CliTester((new FakeHttpTransport())->willReturn($status, $body));
+    }
+
+    private static function categoriesThenSearch(): CliTester
+    {
+        return new CliTester((new FakeHttpTransport())
+            ->willReturn(200, Fixtures::read('categories/categories.json'))
+            ->willReturn(200, Fixtures::read('search/search.xml')));
     }
 
     /**

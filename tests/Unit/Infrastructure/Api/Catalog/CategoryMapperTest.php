@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\Category;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryId;
+use Webreboot\GdeSlon\Domain\Catalog\CategoryNotFoundException;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
@@ -60,6 +61,67 @@ final class CategoryMapperTest extends TestCase
         self::assertSame('Книги', $tree->get(121)->name());
         self::assertSame('Книги', $tree->get(655)->name());
         self::assertSame('Всё для шитья', $tree->get(515)->name());
+    }
+
+    public function testRealFixtureSubtreeOfClothing(): void
+    {
+        self::assertSame([1114, 1128, 1216, 1217, 1230, 1231, 1232, 1522], self::idsOf(self::fixtureTree()->descendantsOf(1113)));
+    }
+
+    public function testRealFixtureSubtreeOfBooksHasDuplicateName(): void
+    {
+        $descendants = self::fixtureTree()->descendantsOf(121);
+
+        self::assertSame([136, 655], self::idsOf($descendants));
+        self::assertSame('Книги', $descendants[1]->name());
+    }
+
+    public function testRealFixtureOrphanBelongsToPathAncestor(): void
+    {
+        $tree = self::fixtureTree();
+
+        self::assertSame([1052], self::idsOf($tree->descendantsOf(263)));
+        self::assertSame([], $tree->childrenOf(263));
+        $this->expectException(CategoryNotFoundException::class);
+        $tree->descendantsOf(277);
+    }
+
+    public function testRealFixtureEveryCategoryIsDescendantOfItsBreadcrumbs(): void
+    {
+        $tree = self::fixtureTree();
+
+        foreach ($tree as $category) {
+            foreach ($tree->breadcrumbs($category->id()) as $crumb) {
+                if ($crumb === $category) {
+                    continue;
+                }
+                self::assertContains($category, $tree->descendantsOf($crumb->id()), sprintf('%s под %s', $category->id(), $crumb->id()));
+            }
+            self::assertNotContains($category, $tree->descendantsOf($category->id()));
+        }
+    }
+
+    public function testRealFixtureDescendantsContainChildren(): void
+    {
+        $tree = self::fixtureTree();
+
+        foreach ($tree as $category) {
+            $descendants = $tree->descendantsOf($category->id());
+            foreach ($tree->childrenOf($category->id()) as $child) {
+                self::assertContains($child, $descendants, sprintf('%s под %s', $child->id(), $category->id()));
+            }
+        }
+    }
+
+    public function testRealFixtureNamesWithSpacesAndCyrillicSurvive(): void
+    {
+        $tree = self::fixtureTree();
+
+        self::assertSame(['Станки'], self::namesOf($tree->descendantsOf(66)));
+        self::assertSame(
+            ['Женская одежда', 'Нижнее белье', 'Детская одежда', 'Для девочек', 'Верхняя одежда', 'Парки', 'Плащи', 'Нижнее белье'],
+            self::namesOf($tree->descendantsOf(1113)),
+        );
     }
 
     public function testEmptyPayloadGivesEmptyTree(): void
@@ -267,5 +329,15 @@ final class CategoryMapperTest extends TestCase
     private static function idsOf(array $categories): array
     {
         return array_map(static fn (Category $category): int => $category->id()->value(), $categories);
+    }
+
+    /**
+     * @param list<Category> $categories
+     *
+     * @return list<string>
+     */
+    private static function namesOf(array $categories): array
+    {
+        return array_map(static fn (Category $category): string => $category->name(), $categories);
     }
 }

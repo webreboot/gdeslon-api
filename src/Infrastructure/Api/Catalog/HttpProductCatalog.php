@@ -53,6 +53,22 @@ final class HttpProductCatalog implements ProductCatalog
                 );
             }
 
+            if ($e->statusCode() === 414) {
+                throw new HttpException(
+                    sprintf(
+                        '%s %s: HTTP 414 — адрес запроса (%d байт) длиннее предела сервера (~8 КиБ): сократите списки категорий, магазинов или артикулов',
+                        $e->method(),
+                        explode('?', $this->url, 2)[0],
+                        strlen($request->uri()),
+                    ),
+                    $e->statusCode(),
+                    $e->method(),
+                    $e->url(),
+                    $e->responseSnippet(),
+                    $e,
+                );
+            }
+
             throw $e;
         } catch (TimeoutException $e) {
             throw new TimeoutException(

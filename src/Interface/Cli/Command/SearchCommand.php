@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Interface\Cli\Command;
 
+use Webreboot\GdeSlon\Domain\Catalog\CategoryNotFoundException;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
 use Webreboot\GdeSlon\Domain\Catalog\OfferSort;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
+use Webreboot\GdeSlon\Interface\Catalog\Subcategories;
 use Webreboot\GdeSlon\Interface\Cli\CommandContext;
 use Webreboot\GdeSlon\Interface\Cli\Credentials;
 use Webreboot\GdeSlon\Interface\Cli\ExitCode;
@@ -52,6 +54,7 @@ final class SearchCommand extends BaseCommand
             Option::listOf('exclude-merchant', 'кроме этих магазинов'),
             Option::listOf('category', 'только в этих товарных категориях (gdeslon categories)'),
             Option::listOf('exclude-category', 'кроме этих категорий'),
+            Option::flag('subcategories', '--category и --exclude-category вместе с подкатегориями; исключение побеждает'),
             Option::listOf('article', 'артикулы товаров', 'АРТИКУЛ,…'),
             Option::value('limit', 'офферов на странице, 1–100 (по умолчанию 10)', 'N'),
             Option::value('page', 'номер страницы, с 1', 'N'),
@@ -68,18 +71,31 @@ final class SearchCommand extends BaseCommand
     public function execute(Input $input, array $arguments, CommandContext $context): int
     {
         $sort = $input->value('sort');
+        $categories = self::intList($input, 'category');
+        $excludedCategories = self::intList($input, 'exclude-category');
+        $subcategories = $input->flag('subcategories') && ($categories !== [] || $excludedCategories !== []);
         $criteria = new SearchCriteria(
             query: $arguments === [] ? null : implode(' ', $arguments),
             merchants: self::intList($input, 'merchant'),
             excludedMerchants: self::intList($input, 'exclude-merchant'),
-            categories: self::intList($input, 'category'),
-            excludedCategories: self::intList($input, 'exclude-category'),
+            categories: $subcategories ? [] : $categories,
+            excludedCategories: $subcategories ? [] : $excludedCategories,
             articles: $input->list('article'),
             limit: self::intOption($input, 'limit') ?? SearchCriteria::DEFAULT_LIMIT,
             page: self::intOption($input, 'page') ?? 1,
             sort: $sort === null ? null : OptionValues::choice($sort, self::SORTS, 'sort'),
             parkedDomain: $input->value('parked-domain'),
         );
+
+        if ($subcategories) {
+            try {
+                $criteria = Subcategories::expand($context->gdeslon()->categories(), $criteria, $categories, $excludedCategories);
+            } catch (CategoryNotFoundException $e) {
+                $context->notice(sprintf('Категории %d нет', $e->categoryId()));
+
+                return ExitCode::FAILURE;
+            }
+        }
 
         $result = $context->gdeslon()->search($criteria);
         $context->warnSkipped($result->skipped());

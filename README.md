@@ -93,10 +93,33 @@ $tree->find(277);                 // ?Category
 $tree->roots();
 $tree->childrenOf(1113);
 $tree->breadcrumbs(1231);         // list<Category> от корня
+$tree->descendantsOf(1114);       // list<Category>: всё поддерево без самой 1114
 $tree->orphans();                 // категории с отсутствующим в выгрузке родителем
 ```
 
 У «осиротевших» категорий `breadcrumbs()` пропускает недостающие звенья; полный путь из ID — `Category::path()`.
+
+`descendantsOf()` возвращает категории, в чьём `path()` есть указанная, кроме неё самой, в порядке `all()`; архивные
+входят. Поэтому «сирота» попадает в поддерево существующего предка из своего пути (`childrenOf()` и обход по
+`parentId()` её не находят). Несуществующий ID — `CategoryNotFoundException`.
+
+Поиск по категории (`tid`) берёт только саму категорию, без дочерних. Чтобы искать по разделу целиком, передайте всё
+поддерево:
+
+```php
+use Webreboot\GdeSlon\Domain\Catalog\Category;
+use Webreboot\GdeSlon\Domain\Catalog\CategoryId;
+
+$tree = $gdeslon->categories();
+$page = $gdeslon->search(new SearchCriteria(
+    query: 'тренч',
+    categories: [new CategoryId(1114), ...array_map(static fn (Category $c): CategoryId => $c->id(), $tree->descendantsOf(1114))],
+));
+```
+
+Длина адреса запроса ограничена сервером (~8 КиБ): поддерево 1114 (65 ID) — около 0,6 КБ, самый большой раздел
+1113 «Одежда» (516 ID) — около 3,7 КБ, все категории сразу не пройдут. В бюджет входят и `query`, магазины, артикулы.
+Слишком длинный запрос — `HttpException` со `statusCode() === 414` и подсказкой сократить списки.
 
 ### Магазины
 
@@ -136,7 +159,7 @@ use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 $criteria = new SearchCriteria(
     query: 'платье',              // синтаксис API: AND, OR, скобки, минус-слова
     merchants: [107054, 111211],  // int|MerchantId
-    excludedCategories: [26],     // без дочерних категорий
+    excludedCategories: [26],     // только сама категория, без дочерних — см. «Категории»
     sort: OfferSort::Price,
     limit: 20,                    // 1..100, по умолчанию 10
 );
@@ -167,7 +190,7 @@ while (true) {
 - Адрес картинки или `productUrl()` не http(s) — `null`, оффер не пропускается. Тексты (`name()`, `description()`,
   `vendor()`, `model()`, `adMarking()`) — plain text, см. [Тексты](#тексты).
 - Невалидные критерии и вызов без токена — `InvalidArgumentException` до запроса; неверный токен —
-  `AuthenticationException`.
+  `AuthenticationException`; адрес запроса длиннее ~8 КиБ — `HttpException` 414 (см. [Категории](#категории)).
 - `search.xml` не поддерживает Range. Из сетей, где соединение с `api.gdeslon.ru` обрывается после ~16 КБ (см.
   [Загрузка частями](#загрузка-частями)), ответ с длинными описаниями не загрузится даже при `limit: 10` —
   `TimeoutException`. Обход — `limit` ≤ 5 и меньший `timeout`; SDK `limit` не меняет.

@@ -17,6 +17,9 @@ final class CategoryTree implements \IteratorAggregate, \Countable
     /** @var array<int, list<Category>> */
     private array $childrenByParent = [];
 
+    /** @var array<int, list<Category>> */
+    private array $descendantsByAncestor = [];
+
     /**
      * @param iterable<Category> $categories
      */
@@ -32,6 +35,10 @@ final class CategoryTree implements \IteratorAggregate, \Countable
             $parentId = $category->parentId();
             if ($parentId !== null) {
                 $this->childrenByParent[$parentId->value()][] = $category;
+            }
+
+            foreach (array_slice($category->path(), 0, -1) as $ancestor) {
+                $this->descendantsByAncestor[$ancestor->value()][] = $category;
             }
         }
     }
@@ -73,6 +80,18 @@ final class CategoryTree implements \IteratorAggregate, \Countable
     public function childrenOf(int|CategoryId $id): array
     {
         return $this->childrenByParent[self::value($id)] ?? [];
+    }
+
+    /**
+     * @return list<Category>
+     */
+    public function descendantsOf(int|CategoryId $id): array
+    {
+        if (!$this->has($id)) {
+            throw CategoryNotFoundException::forId($id);
+        }
+
+        return $this->descendantsByAncestor[self::value($id)] ?? [];
     }
 
     /**

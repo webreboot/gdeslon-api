@@ -6,6 +6,8 @@ namespace Webreboot\GdeSlon\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\Domain\Catalog\Category;
+use Webreboot\GdeSlon\Domain\Catalog\CategoryId;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
@@ -209,6 +211,25 @@ final class GdeSlonTest extends TestCase
         self::assertSame('secret-token', $transport->lastRequest()->query()['_gs_at'] ?? null);
         self::assertSame('iphone -pink', $transport->lastRequest()->query()['q'] ?? null);
         self::assertSame('iphone -pink', $result->criteria()->query());
+    }
+
+    public function testSearchBySubtreeSendsWholeSubtree(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willReturn(200, Fixtures::read('categories/categories.json'))
+            ->willReturn(200, Fixtures::read('search/search-empty.xml'));
+        $gdeslon = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport);
+
+        $tree = $gdeslon->categories();
+        $result = $gdeslon->search(new SearchCriteria(
+            query: 'тренч',
+            categories: [new CategoryId(1113), ...array_map(static fn (Category $c): CategoryId => $c->id(), $tree->descendantsOf(1113))],
+        ));
+
+        self::assertTrue($result->isEmpty());
+        self::assertCount(2, $transport->requests());
+        self::assertSame('1113,1114,1128,1216,1217,1230,1231,1232,1522', $transport->lastRequest()->query()['tid'] ?? null);
+        self::assertArrayNotHasKey('no_tid', $transport->lastRequest()->query());
     }
 
     public function testCustomProductCatalog(): void

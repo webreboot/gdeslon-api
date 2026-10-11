@@ -125,6 +125,65 @@ final class HttpProductCatalogTest extends TestCase
         }
     }
 
+    public function testLongCategoryListIsSentAsOneCommaSeparatedTid(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('search/search-empty.xml'));
+        $ids = range(1, 600);
+
+        self::catalog($transport)->search(new SearchCriteria(categories: $ids));
+
+        self::assertCount(1, $transport->requests());
+        $request = $transport->lastRequest();
+        self::assertSame(implode(',', $ids), $request->query()['tid'] ?? null);
+        self::assertSame(1, substr_count($request->uri(), 'tid='));
+        self::assertStringContainsString('tid=1%2C2%2C3%2C', $request->uri());
+    }
+
+    public function testUriTooLongGetsHintToShortenFilters(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(414, Fixtures::read('search/error-414.html'), ['Content-Type' => ['text/html']]);
+
+        try {
+            self::catalog($transport)->search(new SearchCriteria(query: 'тренч', categories: range(1, 1389)));
+            self::fail('Ожидалось исключение');
+        } catch (HttpException $e) {
+            $request = $transport->lastRequest();
+            self::assertNotInstanceOf(AuthenticationException::class, $e);
+            self::assertSame(414, $e->statusCode());
+            self::assertSame(414, $e->getCode());
+            self::assertSame('GET', $e->method());
+            self::assertSame($request->maskedUri(), $e->url());
+            self::assertStringContainsString('414 Request-URI Too Large', $e->responseSnippet());
+            self::assertInstanceOf(HttpException::class, $e->getPrevious());
+            self::assertStringStartsWith('GET ' . self::URL . ': HTTP 414', $e->getMessage());
+            self::assertStringNotContainsString('?', $e->getMessage());
+            self::assertStringNotContainsString('_gs_at', $e->getMessage());
+            self::assertStringContainsString(sprintf('%d байт', strlen($request->uri())), $e->getMessage());
+            foreach (['категорий', 'магазинов', 'артикулов'] as $filter) {
+                self::assertStringContainsString($filter, $e->getMessage());
+            }
+            self::assertNoToken($e);
+        }
+        self::assertCount(1, $transport->requests());
+    }
+
+    public function testOtherClientErrorsKeepGenericMessage(): void
+    {
+        foreach ([400, 413] as $status) {
+            $transport = (new FakeHttpTransport())->willReturn($status, 'Bad Request');
+
+            try {
+                self::catalog($transport)->search(new SearchCriteria(categories: [1113]));
+                self::fail('Ожидалось исключение');
+            } catch (HttpException $e) {
+                self::assertSame($status, $e->statusCode());
+                self::assertSame(sprintf('GET %s: HTTP %d', $transport->lastRequest()->maskedUri(), $status), $e->getMessage());
+                self::assertNull($e->getPrevious());
+                self::assertNoToken($e);
+            }
+        }
+    }
+
     public function testServerError(): void
     {
         $transport = (new FakeHttpTransport())->willReturn(500, 'Something broken!');

@@ -95,13 +95,21 @@ claude mcp add --transport stdio gdeslon -- php /path/to/project/vendor/bin/gdes
 | `list_merchants` | `search`, `domain`, `merchant_category_id`, `limit` (20, до 100), `offset` | `{merchants, skipped, total, …}`, короткая форма магазина: `id, name, domain, url, commission_summary, categories, affiliate_link, ad_marking` |
 | `get_merchant` | `merchant_id` | `{merchant}` — полная форма |
 | `list_merchant_categories` | — | `{categories: [{id, name}]}` |
-| `search_offers` | `query`, `merchant_ids`, `exclude_merchant_ids`, `category_ids`, `exclude_category_ids`, `articles`, `limit` (10, до 100), `page`, `sort` (`price`, `partner_benefit`, `newest`), `parked_domain` | `{query, page, limit, total, next_page, offers, skipped}` |
+| `search_offers` | `query`, `merchant_ids`, `exclude_merchant_ids`, `category_ids`, `exclude_category_ids`, `include_subcategories` (`false`), `articles`, `limit` (10, до 100), `page`, `sort` (`price`, `partner_benefit`, `newest`), `parked_domain` | `{query, page, limit, total, next_page, offers, skipped}`. Категория ищется без подкатегорий; с `include_subcategories: true` — вместе с ними (см. ниже) |
 | `list_orders` | `date_field` (`created`, `transition`, `last_updated`, `confirmed`, `accrued`), `until`, `days` (30, до 3660), `merchant_id`, `states` (`new`, `cancelled`, `pending`, `confirmed`, `paid`), `type` (`product`, `lead`), `sub_id`, `limit` (50, до 200), `offset` | `{orders, skipped, total, …}` |
 | `list_lost_order_claims` | `merchant_id`, `from`, `until`, `claim_state` (`in_work`, `closed`), `order_status` (`waiting`, `confirmed`, `declined`), `limit` (50, до 200), `offset` | `{claims, skipped, total, …}` |
 | `get_lost_order_claim` | `claim_id` | `{claim}` |
 | `list_coupons` | `merchant_ids`, `kind_ids`, `active_only`, `limit` (20, до 100), `offset` | `{coupons, kinds, skipped, total, …}` |
 | `get_coupon` | `coupon_id` | `{coupon}` |
 | `list_coupon_kinds` | — | `{kinds: [{id, name}]}` |
+
+`include_subcategories: true` раскрывает `category_ids` и `exclude_category_ids` в поддеревья (категория и все её
+потомки) и загружает дерево категорий (из кэша, если он есть). Исключение побеждает: исключённые поддеревья вычитаются
+из включённых, пересечение — не ошибка; в запрос уходит только остаток включённых (исключённые отдельно передаются,
+лишь когда `category_ids` пуст). Если от включённых ничего не осталось — `[invalid_arguments]`, поиск не идёт;
+неизвестный ID — `[not_found] Категории N нет`. Без списков категорий флаг ничего не делает. Длина запроса ограничена
+сервером (~8 КиБ): самый большой раздел (1113 «Одежда», 516 ID) проходит, несколько крупных разделов вместе с длинным
+`query` — нет (`[failed]` с HTTP 414 и подсказкой сократить списки).
 
 Создавать заявки на потерянные заказы через MCP нельзя. Это реальная заявка у рекламодателя, её отправляют командой
 `gdeslon lost-orders submit` в терминале ([docs/cli.md](cli.md)).

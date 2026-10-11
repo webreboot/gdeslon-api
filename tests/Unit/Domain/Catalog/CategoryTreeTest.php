@@ -72,6 +72,8 @@ final class CategoryTreeTest extends TestCase
         yield 'get(0)' => [static fn (CategoryTree $tree): Category => $tree->get(0), 0];
         yield 'get(-1)' => [static fn (CategoryTree $tree): Category => $tree->get(-1), -1];
         yield 'breadcrumbs(0)' => [static fn (CategoryTree $tree): array => $tree->breadcrumbs(0), 0];
+        yield 'descendantsOf(0)' => [static fn (CategoryTree $tree): array => $tree->descendantsOf(0), 0];
+        yield 'descendantsOf(-1)' => [static fn (CategoryTree $tree): array => $tree->descendantsOf(-1), -1];
     }
 
     public function testImpossibleIdsAreAbsent(): void
@@ -144,6 +146,143 @@ final class CategoryTreeTest extends TestCase
         self::assertSame([], $withoutOrphans->orphans());
     }
 
+    public function testDescendantsOfLeafIsEmpty(): void
+    {
+        self::assertSame([], self::tree()->descendantsOf(1231));
+    }
+
+    public function testDescendantsOfExcludeCategoryItself(): void
+    {
+        self::assertSame([1231, 1232], self::idsOf(self::tree()->descendantsOf(1230)));
+    }
+
+    public function testDescendantsOfRootCoverAllLevels(): void
+    {
+        self::assertSame([1216, 1217, 1230, 1231, 1232], self::idsOf(self::tree()->descendantsOf(1113)));
+    }
+
+    public function testDescendantsOfAcceptCategoryId(): void
+    {
+        $tree = self::tree();
+
+        self::assertSame($tree->descendantsOf(1216), $tree->descendantsOf(new CategoryId(1216)));
+    }
+
+    public function testDescendantsAreSameInstancesAsGet(): void
+    {
+        $tree = self::tree();
+
+        foreach ($tree->descendantsOf(1113) as $descendant) {
+            self::assertSame($tree->get($descendant->id()), $descendant);
+        }
+    }
+
+    public function testDescendantsFollowInputOrderNotTraversal(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1114, 1113, 'Женская одежда', [1113, 1114]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216]),
+            self::category(1128, 1114, 'Нижнее белье', [1113, 1114, 1128]),
+        ]);
+
+        self::assertSame([1114, 1216, 1128], self::idsOf($tree->descendantsOf(1113)));
+    }
+
+    public function testDescendantsFollowInputOrderEvenWhenChildPrecedesParent(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1231, 1230, 'Парки', [1113, 1230, 1231]),
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1230, 1113, 'Верхняя одежда', [1113, 1230]),
+        ]);
+
+        self::assertSame([1231, 1230], self::idsOf($tree->descendantsOf(1113)));
+        self::assertSame([1231], self::idsOf($tree->descendantsOf(1230)));
+    }
+
+    public function testDescendantsIncludeOrphansByPath(): void
+    {
+        self::assertSame([1052, 1054], self::idsOf(self::tree()->descendantsOf(263)));
+    }
+
+    public function testDescendantsOfOrphanItself(): void
+    {
+        self::assertSame([], self::tree()->descendantsOf(1992));
+
+        $tree = new CategoryTree([
+            self::category(1052, 277, 'Сушильные и гладильные машины', [263, 277, 1052]),
+            self::category(1053, 1052, 'Гладильные прессы', [263, 277, 1052, 1053]),
+        ]);
+        self::assertSame([1053], self::idsOf($tree->descendantsOf(1052)));
+    }
+
+    public function testDescendantsOfMissingAncestorThrows(): void
+    {
+        try {
+            self::tree()->descendantsOf(277);
+            self::fail('Ожидалось исключение');
+        } catch (CategoryNotFoundException $e) {
+            self::assertSame(277, $e->categoryId());
+        }
+    }
+
+    public function testDescendantsOfInEmptyTreeThrows(): void
+    {
+        $this->expectException(CategoryNotFoundException::class);
+
+        (new CategoryTree([]))->descendantsOf(1);
+    }
+
+    public function testDescendantsIncludeArchivedCategories(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113], true),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216], true),
+            self::category(1217, 1216, 'Для девочек', [1113, 1216, 1217]),
+        ]);
+
+        self::assertSame([1216, 1217], self::idsOf($tree->descendantsOf(1113)));
+        self::assertSame([1217], self::idsOf($tree->descendantsOf(1216)));
+    }
+
+    public function testDescendantsTerminateOnParentCycle(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1, 2, 'А', [2, 1]),
+            self::category(2, 1, 'Б', [1, 2]),
+        ]);
+
+        self::assertSame([2], self::idsOf($tree->descendantsOf(1)));
+        self::assertSame([1], self::idsOf($tree->descendantsOf(2)));
+    }
+
+    public function testDescendantsTrustPathOverParentLinks(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216]),
+            self::category(1230, 1216, 'Верхняя одежда', [1113, 1216, 1230]),
+            self::category(1231, 1230, 'Парки', [1113, 1230, 1231]),
+        ]);
+
+        self::assertSame([1231], self::idsOf($tree->childrenOf(1230)));
+        self::assertSame([1230], self::idsOf($tree->descendantsOf(1216)));
+        self::assertSame([1231], self::idsOf($tree->descendantsOf(1230)));
+        self::assertSame([1216, 1230, 1231], self::idsOf($tree->descendantsOf(1113)));
+    }
+
+    public function testDescendantsOfRootWithoutChildren(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(2003, null, 'Кофе', [2003]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216]),
+        ]);
+
+        self::assertSame([], $tree->descendantsOf(2003));
+    }
+
     public function testIterationAndCountFollowInputOrder(): void
     {
         $tree = self::tree();
@@ -172,13 +311,13 @@ final class CategoryTreeTest extends TestCase
     /**
      * @param list<int> $path
      */
-    private static function category(int $id, ?int $parentId, string $name, array $path): Category
+    private static function category(int $id, ?int $parentId, string $name, array $path, bool $archived = false): Category
     {
         return new Category(
             new CategoryId($id),
             $parentId === null ? null : new CategoryId($parentId),
             $name,
-            false,
+            $archived,
             array_map(static fn (int $value): CategoryId => new CategoryId($value), $path),
             null,
         );
