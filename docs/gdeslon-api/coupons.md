@@ -188,3 +188,10 @@ Monday», «Women\`s Day», «Valentine\`s Day», «Christmas Fest», «Free gif
 `coupons.xml` (944 купона, 1 132 334 байт): CDATA по-прежнему нет, сущности — только `&amp;` в ссылках (231);
 в `name`, `description`, `instruction`, `tagging_ads`, `code`, справочниках после разбора XML нет текста вида `&…;`.
 Ссылки `url`/`url-with-code` — `http://` у всех 944.
+
+## erid и sub_id в ссылках (проверено 2026-10-11, задача affiliate-link)
+
+- `coupons.xml` (944): `url` — `?erid=<erid>`, `url-with-code` — `?erid=…` (713) или `?kc=<код>&erid=…` (231);
+  `sub_id` нет. erid — у всех, 11 символов (латиница и цифры), совпадает с erid в конце `tagging_ads`
+  (`…, <сайт>. erid <erid>`). В `kc` бывает закодированный перевод строки (`kc=gdeslon%0A`).
+- `/api/v1/coupons/` (959 купонов): у всех ссылок `?sub_id=None` первым параметром, `erid` нет.
