@@ -756,6 +756,100 @@ public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
 public function submit(#[\SensitiveParameter] NewLostOrderClaim $claim): LostOrderClaim
 ```
 
+## Тестирование в приложении
+
+`Webreboot\GdeSlon\Testing` — фейки для тестов кода, который использует SDK: без сети, без реального времени и без
+зависимости от PHPUnit. Они входят в пакет, отдельной установки не нужно.
+
+| Класс | Заменяет | Возможности |
+|-------|----------|-------------|
+| `FakeHttpTransport` | `HttpTransport` | очередь ответов по порядку: `willReturn($status, $body, $headers)` (значение заголовка — строка или список строк), `willThrow($exception)`, `willFail($curlErrorCode, $message)`; запросы — `requests()`, `lastRequest()` |
+| `FrozenClock` | `Clock` | `FrozenClock::at('2026-10-07 10:00:00')` (без зоны — UTC), `now()`, `advance($seconds)` |
+| `InMemoryCacheStore` | `CacheStore` | кэш в памяти, `all()`; `failWrites()` — запись отказывает |
+| `FakeCategoryRepository`, `FakeMerchantRepository` | порты каталога | отдают переданный снимок; `calls()`, `lastRefresh()`, `lastPublic()` |
+| `FakeProductCatalog` | `ProductCatalog` | очередь страниц-замыканий `fn (SearchCriteria $c): SearchResult`; `criteria()` |
+| `FakeOrderRepository` | `OrderRepository` | переданные заказы на любой фильтр; `criteria()` |
+| `FakeCouponFeed` | `CouponFeed` | переданные купоны с отбором по магазинам фильтра; `criteria()` |
+| `FakeLostOrderClaims` | `LostOrderClaims` | заявки, отбор по магазину, состоянию и статусу; период не учитывается; поданная заявка получает следующий свободный номер от 9001 и видна в `find()` и `get()`; `submitted()`, `criteria()`, `failSubmitWith($exception)` |
+
+Весь путь SDK — запрос, разбор ответа, исключения — проверяется на фейковом транспорте:
+
+```php
+use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\GdeSlon;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+
+final class OfferImportTest extends TestCase
+{
+    public function testImportsOffers(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, (string) file_get_contents(__DIR__ . '/fixtures/search.xml'));
+        $gdeslon = GdeSlon::create(new Config(apiToken: 'test-token'), $transport);
+
+        $page = $gdeslon->search('iphone');
+
+        self::assertCount(7, $page);
+        self::assertSame('iphone', $transport->lastRequest()->query()['q'] ?? null);
+    }
+}
+```
+
+`(new FakeHttpTransport())` — в скобках для PHP 8.1–8.3: вызов метода у `new` без скобок появился в PHP 8.4.
+
+Ошибки API и сети:
+
+```php
+$config = new Config(apiToken: 'test-token', searchFallbackLimit: null);
+
+(new FakeHttpTransport())->willReturn(403, 'This affiliate token does not exists');   // AuthenticationException
+(new FakeHttpTransport())->willReturn(200, '<yml_catalog><offers><offer');            // UnexpectedResponseException
+(new FakeHttpTransport())->willFail(28, 'Operation timed out');                       // TimeoutException
+(new FakeHttpTransport())->willFail(7);                                                // TransportException
+```
+
+`willFail()` принимает код ошибки cURL: 28 — `TimeoutException`, остальные — `TransportException`. Исключение
+создаётся при отправке, с методом и адресом запроса, как у `CurlTransport`. Поиск после таймаута повторяется
+меньшими страницами ([подробнее](#повтор-меньшими-страницами)), и каждый под-запрос берёт следующий ответ из
+очереди; чтобы проверить сам таймаут, отключите повтор: `searchFallbackLimit: null`.
+
+Кэш и время:
+
+```php
+use Webreboot\GdeSlon\Testing\FrozenClock;
+use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
+
+$transport = (new FakeHttpTransport())
+    ->willReturn(200, $categoriesJson, ['ETag' => '"v1"'])
+    ->willReturn(304, '', ['ETag' => '"v1"']);
+$clock = FrozenClock::at('2026-10-07 10:00:00');
+$gdeslon = GdeSlon::create(new Config(cacheTtl: 3600), $transport, new InMemoryCacheStore(), $clock);
+
+$gdeslon->categories();   // запрос, DataOrigin::Fetched
+$gdeslon->categories();   // из кэша, DataOrigin::Cached
+$clock->advance(3600);
+$gdeslon->categories();   // условный запрос, 304 — DataOrigin::Revalidated
+```
+
+Подмена порта целиком, без HTTP:
+
+```php
+use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
+use Webreboot\GdeSlon\Testing\FakeCategoryRepository;
+
+$tree = new CategoryTree($categories);
+$gdeslon = new GdeSlon($transport, categories: new FakeCategoryRepository($tree));
+```
+
+- Фикстуры берите из живых ответов API (сохраните ответ один раз — например, декоратором из «Собственный
+  транспорт») и обезличьте: номера заказов, суммы, sub_id, код вебмастера в партнёрских ссылках (`/cm/…/`, `/cf/…/`),
+  токены купонов (`/ck/…/`). Тело отдаётся байт в байт — кодировка и переводы строк как в API.
+- В тестах — фиктивный токен (`'test-token'`): запрос с токеном виден в `requests()` и в `var_export()` фейка, как у
+  самого `HttpRequest`.
+- Неожиданный вызов (пустая очередь `FakeHttpTransport` или `FakeProductCatalog`) и `lastRequest()` без запросов —
+  `\LogicException`, а не `GdeSlonException`: это ошибка теста, и `catch (GdeSlonException)` в вашем коде её не
+  скроет. У `FakeHttpTransport` в сообщении — метод и адрес запроса без токена.
+
 ## CLI
 
 `vendor/bin/gdeslon` — команды поверх SDK с табличным выводом и стабильным JSON (`--format=json`). Ключи читаются
@@ -796,15 +890,18 @@ src/
   Domain/                   модель без I/O: Catalog, Sales, Claims, Promo, Shared; порты репозиториев и часов
   Infrastructure/           адаптеры портов: Http (cURL, Range), Api (запросы и мапперы), Cache, Clock
   Interface/                Cli, Mcp (JSON-RPC по stdio), Postback, Normalizer (JSON-представление для CLI и MCP)
+  Testing/                  фейки портов, транспорта и часов для тестов приложения; остальной код от них не зависит
 ```
 
 ## Совместимость
 
 Публичный API — фасад `GdeSlon`, `Config`, доменные объекты, порты, `CacheStore`/`HttpTransport` и их реализации,
-`TransportFactory`, `SystemClock`, `Interface\Postback`. Классы и методы с `@internal` в него не входят.
+`TransportFactory`, `SystemClock`, `Interface\Postback`, фейки `Testing\*`. Классы и методы с `@internal` в него не
+входят.
 
-- Новые параметры конструкторов добавляются только в конец списка; вызывайте конструкторы с именованными
-  аргументами.
+- Новые параметры конструкторов и методов (в том числе фейков `Testing\*`) добавляются только в конец списка;
+  вызывайте конструкторы с именованными аргументами.
+- Тексты `\LogicException` фейков `Testing\*` в API не входят: проверяйте класс исключения, а не сообщение.
 - До 1.0 несовместимые изменения возможны в минорных версиях и фиксируются в [CHANGELOG.md](CHANGELOG.md).
 - Стабильность CLI и MCP описана в [docs/cli.md](docs/cli.md#совместимость) и [docs/mcp.md](docs/mcp.md#совместимость).
 
@@ -818,6 +915,8 @@ composer check   # phpstan level max + PHPUnit
 Тесты не обращаются к сети: адаптеры проверяются на фейковом транспорте и обезличенных фикстурах реальных ответов.
 `phpunit.xml.dist` направляет cURL на прокси-заглушку `127.0.0.1:9` (кроме `127.0.0.1` и `localhost`): случайный
 запрос во внешнюю сеть сразу падает с «Failed to connect».
+Фейки портов, транспорта и часов лежат в `src/Testing` (публичный API, ими пользуются и тесты пакета), служебные
+помощники тестов — в `tests/Support`.
 Справочник API с проверенными фактами — [docs/gdeslon-api/](docs/gdeslon-api/README.md).
 
 ## Лицензия

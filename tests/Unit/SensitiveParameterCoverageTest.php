@@ -33,6 +33,9 @@ use Webreboot\GdeSlon\Interface\Postback\PostbackReceiver;
 use Webreboot\GdeSlon\Interface\Postback\PostbackRequest;
 use Webreboot\GdeSlon\Interface\Postback\QueryStringParser;
 use Webreboot\GdeSlon\Interface\Postback\ReceivedPostback;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeLostOrderClaims;
+use Webreboot\GdeSlon\Testing\FakeOrderRepository;
 
 final class SensitiveParameterCoverageTest extends TestCase
 {
@@ -140,6 +143,9 @@ final class SensitiveParameterCoverageTest extends TestCase
         }
         yield 'SubId::__construct $value' => [SubId::class, '__construct', 'value'];
         yield 'SubId::isValid $value' => [SubId::class, 'isValid', 'value'];
+        yield 'FakeHttpTransport::willReturn $body' => [FakeHttpTransport::class, 'willReturn', 'body'];
+        yield 'FakeOrderRepository::__construct $orders' => [FakeOrderRepository::class, '__construct', 'orders'];
+        yield 'FakeLostOrderClaims::__construct $claims' => [FakeLostOrderClaims::class, '__construct', 'claims'];
     }
 
     /**

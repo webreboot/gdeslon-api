@@ -14,7 +14,7 @@ use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\FakeRangeServer;
 use Webreboot\GdeSlon\Tests\Support\LocalHttpServer;
 

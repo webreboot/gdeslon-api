@@ -2,11 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Webreboot\GdeSlon\Tests\Support;
+namespace Webreboot\GdeSlon\Testing;
 
 use Webreboot\GdeSlon\Domain\Catalog\ProductCatalog;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
+use Webreboot\GdeSlon\Exception\GdeSlonException;
 
 final class FakeProductCatalog implements ProductCatalog
 {
@@ -20,6 +21,10 @@ final class FakeProductCatalog implements ProductCatalog
     {
     }
 
+    /**
+     * @throws GdeSlonException
+     * @throws \LogicException
+     */
     public function search(SearchCriteria $criteria): SearchResult
     {
         $this->criteria[] = $criteria;

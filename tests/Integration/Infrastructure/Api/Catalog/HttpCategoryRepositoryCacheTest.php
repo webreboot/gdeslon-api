@@ -18,11 +18,11 @@ use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpCategoryRepository;
 use Webreboot\GdeSlon\Infrastructure\Cache\CachedDocument;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FrozenClock;
+use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
 use Webreboot\GdeSlon\Tests\Support\FakeRangeServer;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
-use Webreboot\GdeSlon\Tests\Support\InMemoryCacheStore;
 
 final class HttpCategoryRepositoryCacheTest extends TestCase
 {

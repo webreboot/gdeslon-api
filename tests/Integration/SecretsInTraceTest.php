@@ -31,10 +31,10 @@ use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 use Webreboot\GdeSlon\Interface\Postback\HeaderSecret;
 use Webreboot\GdeSlon\Interface\Postback\PostbackReceiver;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FrozenClock;
+use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
-use Webreboot\GdeSlon\Tests\Support\InMemoryCacheStore;
 use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class SecretsInTraceTest extends TestCase

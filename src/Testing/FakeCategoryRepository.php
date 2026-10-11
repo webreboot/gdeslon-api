@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Webreboot\GdeSlon\Tests\Support;
+namespace Webreboot\GdeSlon\Testing;
 
 use Webreboot\GdeSlon\Domain\Catalog\CategoryRepository;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;

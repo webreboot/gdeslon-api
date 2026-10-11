@@ -14,7 +14,7 @@ use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 
 final class ApiClientTest extends TestCase

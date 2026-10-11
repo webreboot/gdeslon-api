@@ -10,7 +10,7 @@ use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpCategoryRepository;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 
 final class HttpCategoryRepositoryTest extends TestCase

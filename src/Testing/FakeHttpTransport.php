@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Webreboot\GdeSlon\Tests\Support;
+namespace Webreboot\GdeSlon\Testing;
 
 use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlErrorMapper;
@@ -19,11 +19,11 @@ final class FakeHttpTransport implements HttpTransport
     private array $requests = [];
 
     /**
-     * @param array<string, list<string>> $headers
+     * @param array<string, string|list<string>> $headers
      */
-    public function willReturn(int $status, string $body, array $headers = []): self
+    public function willReturn(int $status, #[\SensitiveParameter] string $body, array $headers = []): self
     {
-        $this->queue[] = new HttpResponse($status, $body, $headers);
+        $this->queue[] = new HttpResponse($status, $body, array_map(static fn (string|array $values): array => (array) $values, $headers));
 
         return $this;
     }
@@ -35,13 +35,17 @@ final class FakeHttpTransport implements HttpTransport
         return $this;
     }
 
-    public function willFail(int $code, string $error = 'Failed to connect'): self
+    public function willFail(int $curlErrorCode, string $message = 'Failed to connect'): self
     {
-        $this->queue[] = [$code, $error];
+        $this->queue[] = [$curlErrorCode, $message];
 
         return $this;
     }
 
+    /**
+     * @throws TransportException
+     * @throws \LogicException
+     */
     public function send(#[\SensitiveParameter] HttpRequest $request): HttpResponse
     {
         $this->requests[] = $request;
@@ -67,8 +71,11 @@ final class FakeHttpTransport implements HttpTransport
         return $this->requests;
     }
 
+    /**
+     * @throws \LogicException
+     */
     public function lastRequest(): HttpRequest
     {
-        return $this->requests[count($this->requests) - 1] ?? throw new \LogicException('Запросов не было');
+        return $this->requests[count($this->requests) - 1] ?? throw new \LogicException('FakeHttpTransport: запросов не было');
     }
 }

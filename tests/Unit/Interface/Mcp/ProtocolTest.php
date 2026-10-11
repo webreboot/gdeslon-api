@@ -14,8 +14,8 @@ use Webreboot\GdeSlon\Interface\Mcp\ProtocolVersion;
 use Webreboot\GdeSlon\Interface\Mcp\StdioChannel;
 use Webreboot\GdeSlon\Interface\Mcp\ToolCatalog;
 use Webreboot\GdeSlon\Interface\Mcp\ToolContext;
+use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\EchoTool;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
 
 final class ProtocolTest extends TestCase
 {

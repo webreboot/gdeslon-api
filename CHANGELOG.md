@@ -54,6 +54,13 @@
   `GdeSlon::create($config)`, для декоратора снаружи. `$inner` не подгоняется под `Config`, при `rangeChunkSize: null`
   возвращается как есть; `GdeSlon::create(transport: $transport)` по-прежнему без загрузки частями (см. README,
   «Собственный транспорт»).
+- `Webreboot\GdeSlon\Testing` — фейки для тестов приложения без сети и без зависимости от PHPUnit:
+  `FakeHttpTransport` (очередь ответов `willReturn()`, `willThrow()`, `willFail($curlErrorCode)` — 28 даёт
+  `TimeoutException`; `requests()`, `lastRequest()`), `FrozenClock` (`at()`, `advance()`), `InMemoryCacheStore`
+  (`failWrites()`), `FakeCategoryRepository`, `FakeMerchantRepository`, `FakeProductCatalog`, `FakeOrderRepository`,
+  `FakeCouponFeed`, `FakeLostOrderClaims` (поданная заявка получает следующий свободный номер от 9001 и видна в `find()`
+  и `get()`). Неожиданный запрос — `\LogicException`, а не `GdeSlonException`; неразборное время в
+  `FrozenClock::at()` — `InvalidArgumentException` (см. README, «Тестирование в приложении»).
 
 ### Безопасность
 

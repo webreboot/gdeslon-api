@@ -21,7 +21,7 @@ use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 
 final class HttpProductCatalogTest extends TestCase

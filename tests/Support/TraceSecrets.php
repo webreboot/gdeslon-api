@@ -104,7 +104,7 @@ trait TraceSecrets
      */
     private static function packageFrameArgs(\Throwable $e, bool $withSupport = true): array
     {
-        $tests = $withSupport ? '~^Webreboot\\\\GdeSlon\\\\Tests\\\\(?:Unit|Integration)\\\\~' : '~^Webreboot\\\\GdeSlon\\\\Tests\\\\~';
+        $tests = $withSupport ? '~^Webreboot\\\\GdeSlon\\\\Tests\\\\(?:Unit|Integration)\\\\~' : '~^Webreboot\\\\GdeSlon\\\\(?:Tests|Testing)\\\\~';
         $args = [];
         foreach ($e->getTrace() as $frame) {
             $class = $frame['class'] ?? '';

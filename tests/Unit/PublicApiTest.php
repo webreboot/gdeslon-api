@@ -67,6 +67,44 @@ final class PublicApiTest extends TestCase
         self::assertStringContainsString('rangeHosts', $unreleased);
     }
 
+    public function testReadmeDocumentsTesting(): void
+    {
+        $readme = (string) file_get_contents(dirname(__DIR__, 2) . '/README.md');
+        $testing = self::section($readme, '## Тестирование в приложении');
+        foreach ([
+            'use Webreboot\GdeSlon\Testing\FakeHttpTransport;',
+            '(new FakeHttpTransport())->willReturn(200, ',
+            "new Config(apiToken: 'test-token')",
+            '->willFail(28',
+            'searchFallbackLimit: null',
+            'FrozenClock::at(',
+            '->advance(',
+            'new InMemoryCacheStore()',
+            'new GdeSlon($transport, categories: new FakeCategoryRepository($tree))',
+            '`\LogicException`',
+            '`GdeSlonException`',
+            'обезлич',
+            'фиктивный токен',
+            'отбор по магазину, состоянию и статусу; период не учитывается',
+            'следующий свободный номер от 9001',
+        ] as $expected) {
+            self::assertStringContainsString($expected, $testing);
+        }
+        self::assertDoesNotMatchRegularExpression('~(?<!\()new FakeHttpTransport\(\)->~', $testing, 'синтаксис PHP 8.4 без скобок');
+
+        $compatibility = self::section($readme, '## Совместимость');
+        self::assertStringContainsString('`Testing\*`', $compatibility);
+        self::assertStringContainsString('`\LogicException`', $compatibility);
+        self::assertStringContainsString('Testing/', self::section($readme, '## Архитектура'));
+        self::assertStringContainsString('src/Testing', self::section($readme, '## Разработка'));
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        self::assertStringContainsString('`Webreboot\GdeSlon\Testing`', $unreleased);
+        foreach (['FakeHttpTransport', 'FrozenClock', 'InMemoryCacheStore', 'FakeLostOrderClaims'] as $class) {
+            self::assertStringContainsString($class, $unreleased);
+        }
+    }
+
     private static function section(string $markdown, string $heading): string
     {
         $start = strpos($markdown, "\n" . $heading . "\n");

@@ -9,8 +9,8 @@ use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimId;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimList;
-use Webreboot\GdeSlon\Domain\Claims\LostOrderClaims;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimUnconfirmedException;
+use Webreboot\GdeSlon\Domain\Claims\LostOrderClaims;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderCriteria;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
 use Webreboot\GdeSlon\Exception\TimeoutException;
@@ -18,12 +18,12 @@ use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Interface\Cli\Application;
 use Webreboot\GdeSlon\Interface\Cli\Console;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeLostOrderClaims;
+use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\CliTester;
 use Webreboot\GdeSlon\Tests\Support\FailingStream;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
-use Webreboot\GdeSlon\Tests\Support\FakeLostOrderClaims;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
 
 final class SalesCommandsTest extends TestCase
 {
@@ -173,20 +173,20 @@ final class SalesCommandsTest extends TestCase
             self::assertSame(1, $cli->run(['lost-orders', 'submit', ...$this->submitOptions()], self::TOKEN, $stdin));
             self::assertStringContainsString('РЕАЛЬНАЯ заявка', $cli->stderr);
             self::assertStringContainsString('Отменено', $cli->stderr);
-            self::assertSame([], $claims->submitted);
+            self::assertSame([], $claims->submitted());
         }
 
         $claims = new FakeLostOrderClaims();
         $cli = self::withClaims($claims);
         self::assertSame(0, $cli->run(['lost-orders', 'submit', ...$this->submitOptions()], self::TOKEN, "YES\n"));
-        self::assertCount(1, $claims->submitted);
+        self::assertCount(1, $claims->submitted());
         self::assertStringContainsString('9001', $cli->stdout);
 
         $claims = new FakeLostOrderClaims();
         $cli = self::withClaims($claims);
         self::assertSame(0, $cli->run(['lost-orders', 'submit', ...$this->submitOptions(), '--yes', '--format=json'], self::TOKEN));
         self::assertStringNotContainsString('Введите yes', $cli->stderr);
-        self::assertCount(1, $claims->submitted);
+        self::assertCount(1, $claims->submitted());
         self::assertStringContainsString('"claim"', $cli->stdout);
     }
 
@@ -195,8 +195,8 @@ final class SalesCommandsTest extends TestCase
         $claims = new FakeLostOrderClaims();
         $cli = self::withClaims($claims);
         self::assertSame(0, $cli->run(['lost-orders', 'submit', ...$this->submitOptions(), '--dry-run', '--format=json'], self::TOKEN));
-        self::assertSame([], $claims->submitted);
-        self::assertCount(1, $claims->criteria, 'дубли проверены');
+        self::assertSame([], $claims->submitted());
+        self::assertCount(1, $claims->criteria(), 'дубли проверены');
         self::assertStringContainsString('"dry_run": true', $cli->stdout);
 
         $existing = (new FakeLostOrderClaims())->submit(new NewLostOrderClaim('GS123L', '2026-09-24', '1', 2573, ClaimAttachment::fromContents('r.pdf', "%PDF-1.4\n")));
@@ -205,13 +205,13 @@ final class SalesCommandsTest extends TestCase
         self::assertSame(5, $cli->run(['lost-orders', 'submit', ...$this->submitOptions(), '--yes'], self::TOKEN));
         self::assertStringContainsString('9001', $cli->stderr);
         self::assertStringContainsString('ожидает', $cli->stderr, 'статус существующей заявки');
-        self::assertSame([], $claims->submitted);
+        self::assertSame([], $claims->submitted());
 
         $claims = new FakeLostOrderClaims([$existing]);
         $cli = self::withClaims($claims);
         self::assertSame(0, $cli->run(['lost-orders', 'submit', ...$this->submitOptions(), '--yes', '--no-duplicate-check'], self::TOKEN));
-        self::assertSame([], $claims->criteria, 'без проверки дублей — без запроса списка');
-        self::assertCount(1, $claims->submitted);
+        self::assertSame([], $claims->criteria(), 'без проверки дублей — без запроса списка');
+        self::assertCount(1, $claims->submitted());
     }
 
     public function testSubmitWhenDuplicatesCannotBeChecked(): void
@@ -240,7 +240,7 @@ final class SalesCommandsTest extends TestCase
         self::assertSame('', $cli->stdout);
         self::assertStringContainsString('--dry-run', $cli->stderr);
         self::assertStringNotContainsString('Введите yes', $cli->stderr);
-        self::assertSame([], $claims->submitted);
+        self::assertSame([], $claims->submitted());
     }
 
     public function testSubmitUnknownOutcome(): void
@@ -274,16 +274,16 @@ final class SalesCommandsTest extends TestCase
 
         $claims = new FakeLostOrderClaims();
         self::assertSame(0, $this->runBroken($claims, ['--no-duplicate-check', '--format=json'], brokenOut: true, brokenErr: true));
-        self::assertCount(1, $claims->submitted);
+        self::assertCount(1, $claims->submitted());
 
         $existing = (new FakeLostOrderClaims())->submit(new NewLostOrderClaim('GS123L', '2026-09-24', '1', 2573, ClaimAttachment::fromContents('r.pdf', "%PDF-1.4\n")));
         $claims = new FakeLostOrderClaims([$existing]);
         self::assertSame(5, $this->runBroken($claims, [], brokenErr: true, fromStart: true));
-        self::assertSame([], $claims->submitted);
+        self::assertSame([], $claims->submitted());
 
         $claims = new FakeLostOrderClaims();
         self::assertSame(1, $this->runBroken($claims, ['--no-duplicate-check'], brokenErr: true, fromStart: true), 'stderr недоступен до отправки');
-        self::assertSame([], $claims->submitted);
+        self::assertSame([], $claims->submitted());
     }
 
     public function testSubmitRejectedByApi(): void

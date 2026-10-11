@@ -6,6 +6,7 @@ namespace Webreboot\GdeSlon\Tests\Support;
 
 use PHPUnit\Framework\Assert;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 
 final class McpTester
 {

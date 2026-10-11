@@ -32,22 +32,22 @@ use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
+use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Cache\CachedDocument;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
-use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
-use Webreboot\GdeSlon\Tests\Support\FakeCategoryRepository;
-use Webreboot\GdeSlon\Tests\Support\FakeCouponFeed;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
-use Webreboot\GdeSlon\Tests\Support\FakeLostOrderClaims;
-use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
-use Webreboot\GdeSlon\Tests\Support\FakeOrderRepository;
-use Webreboot\GdeSlon\Tests\Support\FakeProductCatalog;
+use Webreboot\GdeSlon\Testing\FakeCategoryRepository;
+use Webreboot\GdeSlon\Testing\FakeCouponFeed;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeLostOrderClaims;
+use Webreboot\GdeSlon\Testing\FakeMerchantRepository;
+use Webreboot\GdeSlon\Testing\FakeOrderRepository;
+use Webreboot\GdeSlon\Testing\FakeProductCatalog;
+use Webreboot\GdeSlon\Testing\FrozenClock;
+use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
-use Webreboot\GdeSlon\Tests\Support\InMemoryCacheStore;
 
 final class GdeSlonTest extends TestCase
 {
@@ -560,7 +560,7 @@ final class GdeSlonTest extends TestCase
         $criteria = new LostOrderCriteria(merchant: 2573);
 
         self::assertCount(1, $gdeslon->lostOrders($criteria));
-        self::assertSame($criteria, $claims->criteria[0]);
+        self::assertSame($criteria, $claims->criteria()[0]);
         self::assertSame(5796, $gdeslon->lostOrder(5796)?->id()->value());
         self::assertNull($gdeslon->lostOrder(new LostOrderClaimId(1)));
         self::assertCount(1, $gdeslon->lostOrders());
@@ -577,16 +577,16 @@ final class GdeSlonTest extends TestCase
         } catch (DuplicateLostOrderClaimException $e) {
             self::assertSame(5796, $e->existing()->id()->value());
         }
-        self::assertSame([], $claims->submitted);
-        self::assertSame(2573, $claims->criteria[0]->merchant()?->value(), 'проверка по своему магазину');
+        self::assertSame([], $claims->submitted());
+        self::assertSame(2573, $claims->criteria()[0]->merchant()?->value(), 'проверка по своему магазину');
 
         $created = $gdeslon->submitLostOrderClaim(self::newLostOrderClaim('GS999'));
         self::assertSame('GS999', $created->orderNumber());
-        self::assertCount(1, $claims->submitted);
+        self::assertCount(1, $claims->submitted());
 
         $gdeslon->submitLostOrderClaim(self::newLostOrderClaim('GS123L'), checkDuplicates: false);
-        self::assertCount(2, $claims->submitted);
-        self::assertCount(2, $claims->criteria, 'без проверки — без запроса списка');
+        self::assertCount(2, $claims->submitted());
+        self::assertCount(2, $claims->criteria(), 'без проверки — без запроса списка');
     }
 
     public function testSubmitStopsWhenDuplicatesCannotBeChecked(): void
@@ -600,7 +600,7 @@ final class GdeSlonTest extends TestCase
         } catch (UnexpectedResponseException $e) {
             self::assertStringContainsString('дубли', $e->getMessage());
         }
-        self::assertSame([], $claims->submitted);
+        self::assertSame([], $claims->submitted());
     }
 
     public function testCreateWiresLostOrdersWithToken(): void
@@ -638,9 +638,9 @@ final class GdeSlonTest extends TestCase
         $criteria = CouponCriteria::forMerchant(99157);
 
         self::assertSame($criteria, $gdeslon->coupons($criteria)->criteria());
-        self::assertSame($criteria, $feed->lastCriteria);
+        self::assertSame($criteria, $feed->criteria()[0]);
         $gdeslon->coupons();
-        self::assertEquals(new CouponCriteria(), $feed->lastCriteria);
+        self::assertEquals(new CouponCriteria(), $feed->criteria()[1]);
     }
 
     public function testCreateWiresCouponsWithToken(): void

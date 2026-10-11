@@ -14,7 +14,7 @@ use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Promo\HttpCouponFeed;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 
 final class HttpCouponFeedTest extends TestCase

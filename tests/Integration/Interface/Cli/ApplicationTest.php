@@ -12,10 +12,10 @@ use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Cache\FileCacheStore;
 use Webreboot\GdeSlon\Interface\Cli\Application;
 use Webreboot\GdeSlon\Interface\Cli\Console;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\CliTester;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
 
 final class ApplicationTest extends TestCase
 {

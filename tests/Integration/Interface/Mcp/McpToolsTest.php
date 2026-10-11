@@ -14,11 +14,11 @@ use Webreboot\GdeSlon\Infrastructure\Api\Catalog\CategoryMapper;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpProductCatalog;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\MerchantXmlParser;
 use Webreboot\GdeSlon\Interface\Normalizer\JsonShapes;
-use Webreboot\GdeSlon\Tests\Support\FakeCategoryRepository;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
-use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
+use Webreboot\GdeSlon\Testing\FakeCategoryRepository;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeMerchantRepository;
+use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\McpTester;
 
 final class McpToolsTest extends TestCase

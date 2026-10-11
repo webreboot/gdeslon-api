@@ -22,9 +22,9 @@ use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Claims\HttpLostOrderClaims;
-use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\PersonalDataMarkers;
 use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
 

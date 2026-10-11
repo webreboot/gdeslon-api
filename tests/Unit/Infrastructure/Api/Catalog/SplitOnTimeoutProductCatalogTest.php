@@ -18,7 +18,7 @@ use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\SplitOnTimeoutProductCatalog;
-use Webreboot\GdeSlon\Tests\Support\FakeProductCatalog;
+use Webreboot\GdeSlon\Testing\FakeProductCatalog;
 
 final class SplitOnTimeoutProductCatalogTest extends TestCase
 {

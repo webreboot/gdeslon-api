@@ -9,8 +9,8 @@ use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Infrastructure\Cache\CachedDocument;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
-use Webreboot\GdeSlon\Tests\Support\FrozenClock;
-use Webreboot\GdeSlon\Tests\Support\InMemoryCacheStore;
+use Webreboot\GdeSlon\Testing\FrozenClock;
+use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
 
 final class DocumentCacheTest extends TestCase
 {

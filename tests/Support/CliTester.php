@@ -10,6 +10,8 @@ use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Cache\CacheStore;
 use Webreboot\GdeSlon\Interface\Cli\Application;
 use Webreboot\GdeSlon\Interface\Cli\Console;
+use Webreboot\GdeSlon\Testing\FakeHttpTransport;
+use Webreboot\GdeSlon\Testing\FrozenClock;
 
 final class CliTester
 {

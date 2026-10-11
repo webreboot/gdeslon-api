@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Webreboot\GdeSlon\Tests\Support;
+namespace Webreboot\GdeSlon\Testing;
 
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimId;
@@ -15,11 +15,14 @@ use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
 
 final class FakeLostOrderClaims implements LostOrderClaims
 {
+    /** @var list<LostOrderClaim> */
+    private array $claims;
+
     /** @var list<LostOrderCriteria> */
-    public array $criteria = [];
+    private array $criteria = [];
 
     /** @var list<NewLostOrderClaim> */
-    public array $submitted = [];
+    private array $submitted = [];
 
     private ?\Throwable $submitFailure = null;
 
@@ -27,8 +30,9 @@ final class FakeLostOrderClaims implements LostOrderClaims
      * @param list<LostOrderClaim> $claims
      * @param list<string>         $skipped
      */
-    public function __construct(private readonly array $claims = [], private readonly array $skipped = [])
+    public function __construct(#[\SensitiveParameter] array $claims = [], private readonly array $skipped = [])
     {
+        $this->claims = $claims;
     }
 
     public function find(LostOrderCriteria $criteria): LostOrderClaimList
@@ -49,26 +53,50 @@ final class FakeLostOrderClaims implements LostOrderClaims
         return null;
     }
 
-    public function failSubmitWith(\Throwable $failure): void
-    {
-        $this->submitFailure = $failure;
-    }
-
     public function submit(#[\SensitiveParameter] NewLostOrderClaim $claim): LostOrderClaim
     {
         if ($this->submitFailure !== null) {
             throw $this->submitFailure;
         }
+        $orderDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $claim->orderDate(), new \DateTimeZone('Europe/Moscow'));
+        if ($orderDate === false) {
+            throw new \LogicException('FakeLostOrderClaims: неразборная дата заказа');
+        }
         $this->submitted[] = $claim;
-
-        return new LostOrderClaim(
-            9000 + count($this->submitted),
+        $created = new LostOrderClaim(
+            max([9000, ...array_map(static fn (LostOrderClaim $existing): int => $existing->id()->value(), $this->claims)]) + 1,
             $claim->orderNumber(),
-            new \DateTimeImmutable($claim->orderDate()),
+            $orderDate,
             $claim->orderTotal(),
             $claim->merchant(),
             LostOrderStatus::Waiting,
             LostOrderClaimState::InWork,
         );
+        $this->claims[] = $created;
+
+        return $created;
+    }
+
+    public function failSubmitWith(\Throwable $failure): self
+    {
+        $this->submitFailure = $failure;
+
+        return $this;
+    }
+
+    /**
+     * @return list<LostOrderCriteria>
+     */
+    public function criteria(): array
+    {
+        return $this->criteria;
+    }
+
+    /**
+     * @return list<NewLostOrderClaim>
+     */
+    public function submitted(): array
+    {
+        return $this->submitted;
     }
 }
