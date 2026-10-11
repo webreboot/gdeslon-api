@@ -40,7 +40,7 @@ final class MerchantShowCommand extends BaseCommand
     public function execute(Input $input, array $arguments, CommandContext $context): int
     {
         $id = self::idArgument($arguments, 'ID магазина');
-        $merchant = $context->gdeslon()->merchants()->find($id);
+        $merchant = $context->merchants()->find($id);
         if ($merchant === null) {
             $context->notice(sprintf('Магазина %d нет', $id));
 

@@ -35,14 +35,17 @@ final class HttpMerchantRepository implements MerchantRepository
         $this->loader = new ConditionalLoader($client, $cache);
     }
 
-    public function all(): MerchantList
+    public function all(bool $public = false): MerchantList
     {
-        $request = HttpRequest::get($this->url, $this->token === null ? [] : ['api_token' => $this->token]);
+        $token = $public ? null : ($this->token ?? throw new InvalidArgumentException(
+            'Магазины вебмастера требуют токен XML API: new Config(apiToken: …); публичный каталог без партнёрских ссылок — merchants(public: true)',
+        ));
+        $request = HttpRequest::get($this->url, $token === null ? [] : ['api_token' => $token]);
 
         return $this->loader->load(
             $request,
-            $this->url . '#' . hash('sha256', $this->token ?? ''),
-            fn (#[\SensitiveParameter] HttpResponse $response): MerchantList => $this->toList($request, $response),
+            $this->url . '#' . hash('sha256', $token ?? ''),
+            fn (#[\SensitiveParameter] HttpResponse $response): MerchantList => $this->toList($request, $response, $public),
             static fn (MerchantList $list): bool => $list->skipped() === [],
         );
     }
@@ -67,11 +70,11 @@ final class HttpMerchantRepository implements MerchantRepository
         return ['url' => $this->url, 'token' => $this->token === null ? null : '***'];
     }
 
-    private function toList(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response): MerchantList
+    private function toList(#[\SensitiveParameter] HttpRequest $request, #[\SensitiveParameter] HttpResponse $response, bool $public): MerchantList
     {
         $list = $this->parser->parse($response->body());
 
-        if ($this->token !== null && count($list) > 0 && $list->filter(static fn (Merchant $m): bool => $m->affiliateLink() !== null) === []) {
+        if (!$public && count($list) > 0 && $list->filter(static fn (Merchant $m): bool => $m->affiliateLink() !== null) === []) {
             throw new AuthenticationException(
                 sprintf(
                     '%s %s: токен XML API не принят: в ответе нет партнёрских ссылок (неверный токен или нет подключённых программ)',

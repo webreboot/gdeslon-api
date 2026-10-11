@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Interface\Mcp;
 
+use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Interface\Cli\Console;
@@ -32,6 +33,11 @@ final class ToolContext
     public function gdeslon(): GdeSlon
     {
         return $this->gdeslon ??= ($this->factory)();
+    }
+
+    public function merchants(): MerchantList
+    {
+        return $this->gdeslon()->merchants(public: $this->environment->token() === null);
     }
 
     public function log(string $message): void

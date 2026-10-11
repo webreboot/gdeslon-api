@@ -35,7 +35,7 @@ final class MerchantCategoriesCommand extends BaseCommand
     public function execute(Input $input, array $arguments, CommandContext $context): int
     {
         self::noArguments($arguments);
-        $categories = $context->gdeslon()->merchants()->categories();
+        $categories = $context->merchants()->categories();
 
         if ($context->json) {
             $context->json(['categories' => array_map(CatalogNormalizer::merchantCategory(...), $categories)]);

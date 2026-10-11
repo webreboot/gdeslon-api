@@ -140,14 +140,82 @@ final class GdeSlonTest extends TestCase
         self::assertSame('https://www.gdeslon.ru/api/users/shops.xml?api_token=secret-token', $transport->lastRequest()->uri());
     }
 
+    public function testMerchantsWithoutTokenRequirePublicFlag(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops-public.xml'));
+        $gdeslon = GdeSlon::create(new Config(), $transport);
+
+        try {
+            $gdeslon->merchants();
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame('Магазины вебмастера требуют токен XML API: new Config(apiToken: …); публичный каталог без партнёрских ссылок — merchants(public: true)', $e->getMessage());
+        }
+        self::assertSame([], $transport->requests());
+
+        $list = $gdeslon->merchants(public: true);
+
+        self::assertCount(2, $list);
+        self::assertNull($list->get(105263)->affiliateLink());
+        self::assertSame('https://www.gdeslon.ru/api/users/shops.xml', $transport->lastRequest()->uri());
+    }
+
+    public function testDefaultConstructorMerchantsRequireToken(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops-public.xml'));
+        $gdeslon = new GdeSlon($transport);
+
+        try {
+            $gdeslon->merchants();
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('merchants(public: true)', $e->getMessage());
+        }
+        self::assertSame([], $transport->requests());
+
+        self::assertCount(2, $gdeslon->merchants(public: true));
+        self::assertSame('https://www.gdeslon.ru/api/users/shops.xml', $transport->lastRequest()->uri());
+    }
+
+    public function testPublicMerchantsWithTokenSkipToken(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops-public.xml'));
+
+        $list = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport)->merchants(public: true);
+
+        self::assertCount(2, $list);
+        self::assertSame('https://www.gdeslon.ru/api/users/shops.xml', $transport->lastRequest()->uri());
+    }
+
     public function testCustomMerchantRepository(): void
     {
         $transport = new FakeHttpTransport();
         $repository = new FakeMerchantRepository(new MerchantList([]));
+        $gdeslon = new GdeSlon($transport, null, $repository);
 
-        self::assertCount(0, (new GdeSlon($transport, null, $repository))->merchants());
-        self::assertSame(1, $repository->calls());
+        self::assertCount(0, $gdeslon->merchants());
+        self::assertFalse($repository->lastPublic());
+        self::assertCount(0, $gdeslon->merchants(public: true));
+        self::assertTrue($repository->lastPublic());
+        self::assertSame(2, $repository->calls());
         self::assertSame([], $transport->requests());
+    }
+
+    public function testPublicMerchantsReuseTokenlessCacheEntry(): void
+    {
+        $clock = FrozenClock::at('2026-10-07 12:00:00');
+        $entry = (new CachedDocument(Fixtures::read('merchants/shops-public.xml'), 'W/"e"', null, $clock->now()))->toString();
+
+        foreach ([null, 'secret-token'] as $token) {
+            $store = new InMemoryCacheStore();
+            $store->set(DocumentCache::key('https://www.gdeslon.ru/api/users/shops.xml#' . hash('sha256', '')), $entry);
+            $transport = new FakeHttpTransport();
+
+            $list = GdeSlon::create(new Config(apiToken: $token), $transport, $store, $clock)->merchants(public: true);
+
+            self::assertCount(2, $list);
+            self::assertSame([], $transport->requests());
+        }
     }
 
     public function testMerchantCacheTtlAndKeyFromConfig(): void

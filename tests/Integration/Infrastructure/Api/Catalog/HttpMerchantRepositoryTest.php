@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
 use Webreboot\GdeSlon\Exception\HttpException;
+use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
@@ -19,6 +20,7 @@ final class HttpMerchantRepositoryTest extends TestCase
 {
     private const URL = 'https://www.gdeslon.ru/api/users/shops.xml';
     private const TOKEN = 'secret-token';
+    private const NO_TOKEN_MESSAGE = 'Магазины вебмастера требуют токен XML API: new Config(apiToken: …); публичный каталог без партнёрских ссылок — merchants(public: true)';
 
     public function testLoadsMerchantsWithToken(): void
     {
@@ -35,11 +37,25 @@ final class HttpMerchantRepositoryTest extends TestCase
         self::assertNull($request->header('Authorization'));
     }
 
-    public function testWithoutTokenLoadsPublicCatalog(): void
+    public function testWithoutTokenRequiresExplicitPublicMode(): void
+    {
+        $transport = new FakeHttpTransport();
+
+        try {
+            self::repository($transport)->all();
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(self::NO_TOKEN_MESSAGE, $e->getMessage());
+        }
+
+        self::assertSame([], $transport->requests());
+    }
+
+    public function testWithoutTokenPublicModeLoadsPublicCatalog(): void
     {
         $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops-public.xml'));
 
-        $list = self::repository($transport)->all();
+        $list = self::repository($transport)->all(public: true);
 
         self::assertSame(self::URL, $transport->lastRequest()->uri());
         self::assertCount(2, $list);
@@ -127,6 +143,94 @@ final class HttpMerchantRepositoryTest extends TestCase
         $this->expectException(UnexpectedResponseException::class);
 
         self::repository($transport, self::TOKEN)->all();
+    }
+
+    public function testPublicModeWithTokenSendsNoToken(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops-public.xml'));
+
+        $list = self::repository($transport, self::TOKEN)->all(public: true);
+
+        self::assertSame(self::URL, $transport->lastRequest()->uri());
+        self::assertCount(2, $list);
+        self::assertNull($list->get(105263)->affiliateLink());
+    }
+
+    public function testPublicModeWithTokenKeepsLinksIfServerSendsThem(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(200, Fixtures::read('merchants/shops.xml'));
+
+        $list = self::repository($transport, self::TOKEN)->all(public: true);
+
+        self::assertSame(self::URL, $transport->lastRequest()->uri());
+        self::assertCount(9, $list);
+        self::assertNotNull($list->get(105263)->affiliateLink());
+    }
+
+    public function testEmptyPublicCatalogIsNotAnError(): void
+    {
+        foreach ([null, self::TOKEN] as $token) {
+            $transport = (new FakeHttpTransport())->willReturn(200, '<?xml version="1.0" encoding="UTF-8"?><shops/>');
+
+            self::assertCount(0, self::repository($transport, $token)->all(public: true));
+            self::assertSame(self::URL, $transport->lastRequest()->uri());
+        }
+    }
+
+    /**
+     * @param class-string<\Throwable> $expected
+     */
+    #[DataProvider('httpErrors')]
+    public function testHttpErrorsInPublicMode(int $status, string $expected): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn($status, '<html>Cannot GET /api/users/shops.xml</html>');
+
+        try {
+            self::repository($transport, self::TOKEN)->all(public: true);
+            self::fail('Ожидалось исключение');
+        } catch (HttpException $e) {
+            self::assertInstanceOf($expected, $e);
+            self::assertSame(self::URL, $e->url());
+            self::assertStringNotContainsString('api_token', $e->getMessage());
+        }
+    }
+
+    public function testTransportErrorsAndBrokenBodyInPublicMode(): void
+    {
+        $timeout = new TimeoutException('таймаут', 'GET', self::URL, 28);
+        $transport = (new FakeHttpTransport())->willThrow($timeout)->willReturn(200, '<!DOCTYPE html><html>сервис недоступен</html>');
+        $repository = self::repository($transport, self::TOKEN);
+
+        try {
+            $repository->all(public: true);
+            self::fail('Ожидалось исключение');
+        } catch (TimeoutException $e) {
+            self::assertSame($timeout, $e);
+        }
+
+        try {
+            $repository->all(public: true);
+            self::fail('Ожидалось исключение');
+        } catch (UnexpectedResponseException $e) {
+            self::assertStringNotContainsString('api_token', $e->getMessage());
+        }
+
+        foreach ($transport->requests() as $request) {
+            self::assertSame(self::URL, $request->uri());
+        }
+    }
+
+    public function testNotModifiedWithoutCacheInPublicModeIsUnexpected(): void
+    {
+        $transport = (new FakeHttpTransport())->willReturn(304, '');
+
+        try {
+            self::repository($transport, self::TOKEN)->all(public: true);
+            self::fail('Ожидалось исключение');
+        } catch (UnexpectedResponseException $e) {
+            self::assertStringContainsString('304', $e->getMessage());
+            self::assertStringNotContainsString('api_token', $e->getMessage());
+        }
     }
 
     private static function repository(FakeHttpTransport $transport, ?string $token = null): HttpMerchantRepository

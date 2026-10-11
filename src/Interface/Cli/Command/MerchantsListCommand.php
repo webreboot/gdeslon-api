@@ -52,7 +52,7 @@ final class MerchantsListCommand extends BaseCommand
         self::noArguments($arguments);
         $category = self::intOption($input, 'category');
 
-        $list = $context->gdeslon()->merchants();
+        $list = $context->merchants();
         $merchants = $list->all();
         if ($input->value('search') !== null) {
             $merchants = self::intersect($merchants, $list->search($input->value('search')));

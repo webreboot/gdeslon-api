@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Tests\Integration\Interface\Cli;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
+use Webreboot\GdeSlon\GdeSlon;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\MerchantXmlParser;
 use Webreboot\GdeSlon\Tests\Support\CliTester;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 
 final class CatalogCommandsTest extends TestCase
@@ -126,6 +130,48 @@ final class CatalogCommandsTest extends TestCase
         $data = self::json($cli->stdout);
         self::assertIsArray($data['categories']);
         self::assertNotEmpty($data['categories']);
+    }
+
+    /**
+     * @param list<string>          $argv
+     * @param array<string, string> $env
+     */
+    #[DataProvider('merchantCommands')]
+    public function testMerchantCommandsChoosePublicModeByToken(array $argv, array $env, bool $public): void
+    {
+        $repository = new FakeMerchantRepository((new MerchantXmlParser())->parse(Fixtures::read('merchants/shops.xml')));
+        $cli = new CliTester(build: static fn (): GdeSlon => new GdeSlon(new FakeHttpTransport(), null, $repository));
+
+        self::assertSame(0, $cli->run($argv, $env), $cli->stderr);
+        self::assertSame(1, $repository->calls());
+        self::assertSame($public, $repository->lastPublic());
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, array<string, string>, bool}>
+     */
+    public static function merchantCommands(): iterable
+    {
+        foreach (['merchants' => ['merchants'], 'merchants show' => ['merchants', 'show', '105263'], 'merchants categories' => ['merchants', 'categories']] as $name => $argv) {
+            yield $name . ' без токена' => [$argv, [], true];
+            yield $name . ' с токеном' => [$argv, self::TOKEN, false];
+        }
+    }
+
+    public function testMerchantShowAndCategoriesWithoutToken(): void
+    {
+        $cli = self::cli(200, Fixtures::read('merchants/shops-public.xml'));
+        self::assertSame(0, $cli->run(['merchants', 'show', '105263', '--no-cache']), $cli->stderr);
+        self::assertStringContainsString('superstep.ru', $cli->stdout);
+        self::assertStringContainsString('нет (задайте GDESLON_API_TOKEN)', $cli->stdout);
+        self::assertArrayNotHasKey('api_token', $cli->transport->lastRequest()->query());
+
+        $cli = self::cli(200, Fixtures::read('merchants/shops-public.xml'));
+        self::assertSame(0, $cli->run(['merchants', 'categories', '--format=json', '--no-cache']), $cli->stderr);
+        $data = self::json($cli->stdout);
+        self::assertIsArray($data['categories']);
+        self::assertNotEmpty($data['categories']);
+        self::assertArrayNotHasKey('api_token', $cli->transport->lastRequest()->query());
     }
 
     public function testSearchRequiresToken(): void

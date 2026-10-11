@@ -61,7 +61,7 @@ final class ListMerchantsTool extends ReadTool
         $page = Page::of($arguments, 20, 100);
         $arguments->done();
 
-        $list = $context->gdeslon()->merchants();
+        $list = $context->merchants();
         $merchants = $list->all();
         if ($search !== null) {
             $merchants = self::intersect($merchants, $list->search($search));

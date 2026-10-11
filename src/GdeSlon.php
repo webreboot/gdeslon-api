@@ -129,9 +129,9 @@ final class GdeSlon
     /**
      * @throws GdeSlonException
      */
-    public function merchants(): MerchantList
+    public function merchants(bool $public = false): MerchantList
     {
-        return $this->merchants->all();
+        return $this->merchants->all(public: $public);
     }
 
     /**

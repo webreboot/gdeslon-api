@@ -17,7 +17,7 @@ PHP SDK, CLI и MCP-сервер для API вебмастеров партнё�
 | Ресурс | Метод SDK | Запрос | Авторизация |
 |--------|-----------|--------|-------------|
 | Категории товаров | `categories()` | `GET https://api.gdeslon.ru/gdeslon-categories.json` | нет |
-| Магазины | `merchants()` | `GET https://www.gdeslon.ru/api/users/shops.xml` | `api_token` (опционально) |
+| Магазины | `merchants()`, `merchants(public: true)` | `GET https://www.gdeslon.ru/api/users/shops.xml` | `api_token`; публичный каталог — нет |
 | Поиск товаров | `search()` | `GET https://api.gdeslon.ru/api/search.xml` | `_gs_at` |
 | Заказы | `orders()` | `POST https://gdeslon.ru/api/orders/` | HTTP Basic `userId:apiKey` |
 | Потерянные заказы | `lostOrders()`, `lostOrder()`, `submitLostOrderClaim()` | `GET`/`POST https://gdeslon.ru/api/v1/lost-orders/` | `Bearer` |
@@ -52,7 +52,8 @@ $gdeslon = GdeSlon::create(
 );
 
 $tree = $gdeslon->categories();
-$shop = $gdeslon->merchants()->get(105263);
+$shop = $gdeslon->merchants()->get(105263);             // магазины вебмастера; без apiToken — InvalidArgumentException
+$all = $gdeslon->merchants(public: true);                // публичный каталог без партнёрских ссылок, токен не нужен
 $page = $gdeslon->search('iphone -pink');
 $orders = $gdeslon->orders();
 ```
@@ -123,11 +124,16 @@ $page = $gdeslon->search(new SearchCriteria(
 
 ### Магазины
 
-`shops.xml` (~1,4 МБ). С `apiToken` — магазины вебмастера с партнёрскими ссылками, тарифами и условиями; без
-токена — публичный каталог без ссылок.
+Два режима одного `shops.xml`:
+
+- `merchants()` — магазины вебмастера с партнёрскими ссылками, тарифами и условиями (~1,4 МБ). Нужен `apiToken`:
+  без него — `InvalidArgumentException` до запроса, в том числе при свежей копии публичного каталога в кэше.
+- `merchants(public: true)` — публичный каталог всех магазинов сети без партнёрских ссылок (~2 МБ, магазинов больше,
+  чем у вебмастера). Токен не отправляется, даже если задан; копия в кэше одна на всех.
 
 ```php
 $merchants = $gdeslon->merchants();
+$catalog = $gdeslon->merchants(public: true);   // affiliateLink() у всех null
 
 $shop = $merchants->get(105263);        // MerchantNotFoundException, если ID нет
 $shop->affiliateLink();                 // ?string
@@ -141,8 +147,9 @@ $merchants->inCategory(50);             // категория магазинов
 $merchants->skipped();                  // list<string>: причины пропуска битых записей
 ```
 
-- На неверный токен API отвечает 200 и публичным каталогом. Если токен задан, а в ответе нет ни одной партнёрской
-  ссылки, бросается `AuthenticationException` со `statusCode() === 200`.
+- На неверный токен API отвечает 200 и публичным каталогом. Если в ответе `merchants()` нет ни одной партнёрской
+  ссылки, бросается `AuthenticationException` со `statusCode() === 200`. В публичном режиме ссылок нет по
+  определению, эта проверка не делается; остальные ошибки (HTTP, транспорт, битый документ) — как в обычном.
 - Битая запись пропускается и попадает в `skipped()`; такой ответ не кэшируется. Ни одной разобранной записи или
   невалидный документ — `UnexpectedResponseException` либо копия из кэша.
 - Тексты магазина (название, описания, условия, вид, маркировка, имена категорий и типов трафика) — plain text,
@@ -465,8 +472,9 @@ GdeSlon::create(cache: new Psr16CacheStore($psr16Cache));   // psr/simple-cache
 ```
 
 - Кэш магазинов содержит партнёрские ссылки вебмастера: каталог должен быть доступен только процессу приложения
-  (не общий `/tmp`). Токен в кэш не записывается, кэши разных токенов разделены.
-- Документ магазинов ~1,5 МБ: хранилища с лимитом записи 1 МБ (Memcached по умолчанию) его не сохранят, SDK
+  (не общий `/tmp`). Токен в кэш не записывается, кэши разных токенов разделены; публичный каталог
+  (`merchants(public: true)`) — одна запись на все токены.
+- Документ магазинов ~1,5 МБ (публичный каталог ~2 МБ): хранилища с лимитом записи 1 МБ (Memcached по умолчанию) его не сохранят, SDK
   продолжит работу без кэша.
 
 ## HTTP

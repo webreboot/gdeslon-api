@@ -59,7 +59,7 @@ final class GetMerchantTool extends ReadTool
         }
         $arguments->done();
 
-        $merchant = $context->gdeslon()->merchants()->find((int) $id) ?? throw new NotFoundException(sprintf('Магазина %d нет', $id));
+        $merchant = $context->merchants()->find((int) $id) ?? throw new NotFoundException(sprintf('Магазина %d нет', $id));
 
         return ['merchant' => CatalogNormalizer::merchant($merchant)];
     }

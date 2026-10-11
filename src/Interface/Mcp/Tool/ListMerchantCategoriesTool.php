@@ -43,6 +43,6 @@ final class ListMerchantCategoriesTool extends ReadTool
     {
         $arguments->done();
 
-        return ['categories' => array_map(CatalogNormalizer::merchantCategory(...), $context->gdeslon()->merchants()->categories())];
+        return ['categories' => array_map(CatalogNormalizer::merchantCategory(...), $context->merchants()->categories())];
     }
 }

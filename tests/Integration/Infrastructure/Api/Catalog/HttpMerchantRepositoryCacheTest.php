@@ -7,12 +7,14 @@ namespace Webreboot\GdeSlon\Tests\Integration\Infrastructure\Api\Catalog;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
+use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Infrastructure\Api\ApiClient;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpCategoryRepository;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\HttpMerchantRepository;
 use Webreboot\GdeSlon\Infrastructure\Cache\CachedDocument;
+use Webreboot\GdeSlon\Infrastructure\Cache\CacheStore;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
@@ -209,6 +211,102 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
         self::assertCount(9, $this->repository(self::TOKEN)->all());
     }
 
+    public function testPublicModeUsesTokenlessCacheKey(): void
+    {
+        $this->transport->willReturn(200, self::publicFixture(), ['ETag' => [self::ETAG]]);
+
+        self::assertCount(2, $this->repository(self::TOKEN)->all(public: true));
+
+        self::assertSame([DocumentCache::key(HttpMerchantRepository::DEFAULT_URL . '#' . hash('sha256', ''))], array_keys($this->store->all()));
+        foreach ($this->store->all() as $storedKey => $value) {
+            self::assertStringNotContainsString(self::TOKEN, $storedKey);
+            self::assertStringNotContainsString(self::TOKEN, $value);
+        }
+    }
+
+    public function testPublicCatalogIsSharedAcrossTokens(): void
+    {
+        $this->transport->willReturn(200, self::publicFixture(), ['ETag' => [self::ETAG]]);
+
+        self::assertCount(2, $this->repository('token-a')->all(public: true));
+        self::assertCount(2, $this->repository('token-b')->all(public: true));
+        self::assertCount(2, $this->repository(null)->all(public: true));
+
+        self::assertCount(1, $this->transport->requests());
+        self::assertCount(1, $this->store->all());
+    }
+
+    public function testPublicModeWithTokenServesCachedPublicCopy(): void
+    {
+        $this->transport->willReturn(200, self::publicFixture(), ['ETag' => [self::ETAG]]);
+        $repository = $this->repository(self::TOKEN);
+        $repository->all(public: true);
+        $this->clock->advance(self::TTL * 10);
+        $this->transport->willReturn(503, 'busy');
+
+        $list = $repository->all(public: true);
+
+        self::assertCount(2, $list);
+        self::assertCount(2, $this->transport->requests());
+        self::assertSame(HttpMerchantRepository::DEFAULT_URL, $this->transport->lastRequest()->uri());
+    }
+
+    public function testWithoutTokenDefaultModeIgnoresCachedPublicCopy(): void
+    {
+        $this->transport->willReturn(200, self::publicFixture(), ['ETag' => [self::ETAG]]);
+        $this->repository(null)->all(public: true);
+        $before = $this->store->all();
+
+        try {
+            $this->repository(null)->all();
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('merchants(public: true)', $e->getMessage());
+        }
+
+        self::assertCount(1, $this->transport->requests());
+        self::assertSame($before, $this->store->all());
+
+        $store = new class () implements CacheStore {
+            public int $calls = 0;
+
+            public function get(string $key): ?string
+            {
+                $this->calls++;
+
+                return null;
+            }
+
+            public function set(string $key, string $value): bool
+            {
+                $this->calls++;
+
+                return true;
+            }
+        };
+        try {
+            (new HttpMerchantRepository(new ApiClient($this->transport), null, new DocumentCache($store, $this->clock, self::TTL)))->all();
+            self::fail('Ожидалось исключение');
+        } catch (InvalidArgumentException) {
+        }
+        self::assertSame(0, $store->calls);
+    }
+
+    public function testPublicModeRevalidatesWithEtag(): void
+    {
+        $this->transport->willReturn(200, self::publicFixture(), ['ETag' => [self::ETAG]])->willReturn(304, '', ['ETag' => [self::ETAG]]);
+        $repository = $this->repository(self::TOKEN);
+        $repository->all(public: true);
+        $this->clock->advance(self::TTL);
+
+        self::assertCount(2, $repository->all(public: true));
+
+        $request = $this->transport->lastRequest();
+        self::assertSame(self::ETAG, $request->header('If-None-Match'));
+        self::assertSame(HttpMerchantRepository::DEFAULT_URL, $request->uri());
+        self::assertCount(2, $this->transport->requests());
+    }
+
     private function repository(?string $token): HttpMerchantRepository
     {
         return new HttpMerchantRepository(new ApiClient($this->transport), $token, new DocumentCache($this->store, $this->clock, self::TTL));
@@ -224,6 +322,11 @@ final class HttpMerchantRepositoryCacheTest extends TestCase
     private static function fixture(): string
     {
         return Fixtures::read('merchants/shops.xml');
+    }
+
+    private static function publicFixture(): string
+    {
+        return Fixtures::read('merchants/shops-public.xml');
     }
 
     /**

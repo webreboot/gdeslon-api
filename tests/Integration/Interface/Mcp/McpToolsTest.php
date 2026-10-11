@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Webreboot\GdeSlon\Tests\Integration\Interface\Mcp;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Exception\TimeoutException;
+use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Api\Catalog\CategoryMapper;
+use Webreboot\GdeSlon\Infrastructure\Api\Catalog\MerchantXmlParser;
 use Webreboot\GdeSlon\Interface\Normalizer\JsonShapes;
 use Webreboot\GdeSlon\Tests\Support\FakeHttpTransport;
+use Webreboot\GdeSlon\Tests\Support\FakeMerchantRepository;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 use Webreboot\GdeSlon\Tests\Support\FrozenClock;
 use Webreboot\GdeSlon\Tests\Support\McpTester;
@@ -104,6 +108,47 @@ final class McpToolsTest extends TestCase
         $data = McpTester::structured(self::mcp(200, Fixtures::read('merchants/shops.xml'))->call('list_merchant_categories', [], self::TOKEN));
         self::assertShape(['categories' => ['[]' => ['id' => 'int', 'name' => 'string|null']]], $data);
         self::assertNotEmpty($data['categories']);
+    }
+
+    public function testMerchantToolsWithoutTokenUsePublicCatalog(): void
+    {
+        $mcp = self::mcp(200, Fixtures::read('merchants/shops-public.xml'));
+        $data = McpTester::structured($mcp->call('get_merchant', ['merchant_id' => 105263]));
+        self::assertShape(['merchant' => JsonShapes::MERCHANT], $data);
+        self::assertIsArray($data['merchant']);
+        self::assertSame(['affiliate_link' => null], array_intersect_key($data['merchant'], ['affiliate_link' => true]));
+        self::assertArrayNotHasKey('api_token', $mcp->cli->transport->lastRequest()->query());
+
+        $mcp = self::mcp(200, Fixtures::read('merchants/shops-public.xml'));
+        $data = McpTester::structured($mcp->call('list_merchant_categories'));
+        self::assertNotEmpty($data['categories']);
+        self::assertArrayNotHasKey('api_token', $mcp->cli->transport->lastRequest()->query());
+    }
+
+    /**
+     * @return iterable<string, array{string, array<string, mixed>, array<string, string>, bool}>
+     */
+    public static function merchantToolModes(): iterable
+    {
+        foreach (['list_merchants' => [], 'get_merchant' => ['merchant_id' => 105263], 'list_merchant_categories' => []] as $tool => $arguments) {
+            yield "{$tool} без токена" => [$tool, $arguments, [], true];
+            yield "{$tool} с токеном" => [$tool, $arguments, self::TOKEN, false];
+        }
+    }
+
+    /**
+     * @param array<string, mixed>  $arguments
+     * @param array<string, string> $env
+     */
+    #[DataProvider('merchantToolModes')]
+    public function testMerchantToolsChoosePublicModeByToken(string $tool, array $arguments, array $env, bool $public): void
+    {
+        $repository = new FakeMerchantRepository((new MerchantXmlParser())->parse(Fixtures::read('merchants/shops.xml')));
+        $mcp = new McpTester(build: static fn (): GdeSlon => new GdeSlon(new FakeHttpTransport(), null, $repository));
+
+        McpTester::structured($mcp->call($tool, $arguments, $env));
+
+        self::assertSame($public, $repository->lastPublic());
     }
 
     public function testSearch(): void
