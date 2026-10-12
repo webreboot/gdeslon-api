@@ -19,6 +19,7 @@ use Webreboot\GdeSlon\Domain\Claims\DuplicateLostOrderClaimException;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimId;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimState;
+use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimUnconfirmedException;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderCriteria;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderStatus;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
@@ -440,6 +441,49 @@ final class GdeSlonTest extends TestCase
             self::assertNull($e->getPrevious());
         }
         self::assertCount(1, $transport->requests());
+    }
+
+    public function testSearchSplitsTimedOutPartAgainByDefault(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
+            ->willFail(28, 'Operation timed out');
+        for ($page = 1; $page <= 5; $page++) {
+            $transport->willReturn(200, Fixtures::read(sprintf('search/search-l1-p%d.xml', $page)));
+        }
+        $transport->willReturn(200, Fixtures::read('search/search-l5-p2.xml'));
+
+        $result = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport)->search('платье');
+
+        self::assertSame([10, 5, 1, 1, 1, 1, 1, 5], array_map(static fn (HttpRequest $r): mixed => $r->query()['l'] ?? null, $transport->requests()));
+        self::assertCount(10, $result);
+        self::assertSame(1, $result->effectiveLimit());
+    }
+
+    public function testSearchRetriesConnectTimeoutThroughFactoryTransport(): void
+    {
+        $config = new Config(apiToken: 'secret-token');
+        $inner = (new FakeHttpTransport())->willTimeOutOnConnect()->willReturn(200, Fixtures::read('search/search-l5-p1.xml'));
+
+        $result = GdeSlon::create($config, TransportFactory::fromConfig($config, inner: $inner))->search(new SearchCriteria(query: 'платье', limit: 5));
+
+        self::assertCount(5, $result);
+        self::assertCount(2, $inner->requests());
+    }
+
+    public function testLostOrderSubmitIsNotRetriedOnConnectTimeout(): void
+    {
+        $config = new Config(apiToken: 'secret-token', connectRetries: 5);
+        $inner = (new FakeHttpTransport())->willTimeOutOnConnect();
+        $gdeslon = GdeSlon::create($config, TransportFactory::fromConfig($config, inner: $inner));
+
+        try {
+            $gdeslon->submitLostOrderClaim(self::newLostOrderClaim('GS123L'), checkDuplicates: false);
+            self::fail('Ожидалось исключение');
+        } catch (LostOrderClaimUnconfirmedException) {
+        }
+        self::assertCount(1, $inner->requests());
+        self::assertSame('POST', $inner->lastRequest()->method());
     }
 
     public function testSearchFallbackLimitFromConfig(): void

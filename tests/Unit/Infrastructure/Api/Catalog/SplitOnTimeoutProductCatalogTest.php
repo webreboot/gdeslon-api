@@ -259,28 +259,249 @@ final class SplitOnTimeoutProductCatalogTest extends TestCase
         self::assertCount(1, $inner->criteria());
     }
 
-    public function testTimeoutDuringSplitFailsWholePage(): void
+    public function testTimedOutPartIsSplitAgain(): void
     {
-        $subTimeout = new TimeoutException(
-            'GET https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=5&p=2: превышено время ожидания (cURL 28: Operation timed out)',
-            'GET',
-            'https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=5&p=2',
-            28,
+        $criteria = new SearchCriteria(query: 'платье', limit: 10);
+        $inner = self::window([[10, 1], [5, 1]]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search($criteria);
+
+        self::assertSame([[10, 1], [5, 1], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [5, 2]], self::requested($inner));
+        self::assertSame('платье', $inner->criteria()[2]->query());
+        self::assertSame(self::ids(1, 10), self::resultIds($result));
+        self::assertSame(1, $result->effectiveLimit());
+        self::assertTrue($result->isDegraded());
+        self::assertSame($criteria, $result->criteria());
+        $next = $result->nextPage();
+        self::assertNotNull($next);
+        self::assertSame([10, 2], [$next->limit(), $next->page()]);
+    }
+
+    public function testSecondPartSplitStaysInItsWindow(): void
+    {
+        $inner = self::window([[10, 1], [5, 2]]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+
+        self::assertSame([[10, 1], [5, 1], [5, 2], [1, 6], [1, 7], [1, 8], [1, 9], [1, 10]], self::requested($inner));
+        self::assertSame(self::ids(1, 10), self::resultIds($result));
+        self::assertSame(1, $result->effectiveLimit());
+    }
+
+    /**
+     * @return iterable<string, array{int, int, list<array{int, int}>, list<array{int, int}>, int}>
+     */
+    public static function splits(): iterable
+    {
+        yield '4 → 2' => [8, 4, [[8, 1], [4, 1]], [[8, 1], [4, 1], [2, 1], [2, 2], [4, 2]], 2];
+        yield '6 → 3' => [12, 6, [[12, 1], [6, 1]], [[12, 1], [6, 1], [3, 1], [3, 2], [6, 2]], 3];
+        yield '8 → 4' => [16, 8, [[16, 1], [8, 1]], [[16, 1], [8, 1], [4, 1], [4, 2], [8, 2]], 4];
+        yield '9 → 3' => [18, 9, [[18, 1], [9, 1]], [[18, 1], [9, 1], [3, 1], [3, 2], [3, 3], [9, 2]], 3];
+        yield '5 → 1' => [10, 5, [[10, 1], [5, 1]], [[10, 1], [5, 1], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [5, 2]], 1];
+        yield '3 → 1' => [9, 3, [[9, 1], [3, 1]], [[9, 1], [3, 1], [1, 1], [1, 2], [1, 3], [3, 2], [3, 3]], 1];
+        yield '2 → 1' => [10, 2, [[10, 1], [2, 1]], [[10, 1], [2, 1], [1, 1], [1, 2], [2, 2], [2, 3], [2, 4], [2, 5]], 1];
+    }
+
+    /**
+     * @param list<array{int, int}> $hanging
+     * @param list<array{int, int}> $expected
+     */
+    #[DataProvider('splits')]
+    public function testPartSplitsByLargestDivisorNotAboveHalf(int $limit, int $fallback, array $hanging, array $expected, int $effectiveLimit): void
+    {
+        $inner = self::window($hanging);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner, $fallback))->search(new SearchCriteria(limit: $limit));
+
+        self::assertSame($expected, self::requested($inner));
+        self::assertSame(self::ids(1, $limit), self::resultIds($result));
+        self::assertSame($effectiveLimit, $result->effectiveLimit());
+    }
+
+    public function testNestedSplitDownToOne(): void
+    {
+        $inner = self::window([[8, 1], [4, 1], [2, 1]]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner, 4))->search(new SearchCriteria(limit: 8));
+
+        self::assertSame([[8, 1], [4, 1], [2, 1], [1, 1], [1, 2], [2, 2], [4, 2]], self::requested($inner));
+        self::assertSame(self::ids(1, 8), self::resultIds($result));
+        self::assertSame(1, $result->effectiveLimit());
+    }
+
+    public function testSplitOnLaterPageKeepsAbsoluteOffsets(): void
+    {
+        $inner = self::window([[10, 3], [5, 5]]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10, page: 3));
+
+        self::assertSame([[10, 3], [5, 5], [1, 21], [1, 22], [1, 23], [1, 24], [1, 25], [5, 6]], self::requested($inner));
+        self::assertSame(self::ids(21, 30), self::resultIds($result));
+        self::assertSame(4, $result->nextPage()?->page());
+    }
+
+    public function testSplitInDeepWindowStaysWithinApiDepth(): void
+    {
+        $inner = self::window([[10, 1000], [5, 1999]], 20000);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10, page: 1000));
+
+        self::assertSame(
+            [[10, 1000], [5, 1999], [1, 9991], [1, 9992], [1, 9993], [1, 9994], [1, 9995], [5, 2000]],
+            self::requested($inner),
         );
-        $inner = new FakeProductCatalog([self::timeout(), self::page(1, 5, null), static fn (): SearchResult => throw $subTimeout]);
+        self::assertSame(self::ids(9991, 10000), self::resultIds($result));
+        self::assertNull($result->nextPage());
+    }
+
+    public function testShortPieceAfterSplitEndsWindow(): void
+    {
+        $inner = self::window([[10, 1], [5, 1]], 2);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+
+        self::assertSame([[10, 1], [5, 1], [1, 1], [1, 2], [1, 3]], self::requested($inner));
+        self::assertSame(self::ids(1, 2), self::resultIds($result));
+        self::assertFalse($result->hasNextPage());
+    }
+
+    public function testPieceFilledWithSkippedCountsAsFull(): void
+    {
+        $inner = new FakeProductCatalog([
+            self::timeout(),
+            self::timeout(),
+            self::page(1, 1, null),
+            self::page(2, 1, null),
+            self::page(3, 0, null, ['оффер «3»: цена 0']),
+            self::page(4, 1, null),
+            self::page(5, 1, null),
+            self::page(6, 5, null),
+        ]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+
+        self::assertCount(8, $inner->criteria());
+        self::assertSame([...self::ids(1, 2), ...self::ids(4, 10)], self::resultIds($result));
+        self::assertSame(['оффер «3»: цена 0'], $result->skipped());
+        self::assertTrue($result->hasNextPage());
+    }
+
+    public function testTotalComesFromFirstLoadedPiece(): void
+    {
+        $inner = new FakeProductCatalog([
+            self::timeout(),
+            self::timeout(),
+            self::page(1, 1, 8203),
+            self::page(2, 1, null),
+            self::page(3, 1, null),
+            self::page(4, 1, null),
+            self::page(5, 1, null),
+            self::page(6, 5, null),
+        ]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+
+        self::assertSame(8203, $result->total());
+    }
+
+    public function testEmptyFirstPieceEndsSplit(): void
+    {
+        $inner = new FakeProductCatalog([self::timeout(), self::timeout(), self::page(1, 0, 0)]);
+
+        $result = (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+
+        self::assertSame([[10, 1], [5, 1], [1, 1]], self::requested($inner));
+        self::assertTrue($result->isEmpty());
+        self::assertSame(0, $result->total());
+        self::assertNull($result->nextPage());
+    }
+
+    public function testPieceOfOneTimingOutFailsWholePage(): void
+    {
+        $inner = self::window([[10, 1], [5, 1], [1, 2]]);
 
         $e = self::catchTimeout(new SplitOnTimeoutProductCatalog($inner), new SearchCriteria(limit: 10));
 
+        $url = 'https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=1&p=2';
+        self::assertNotInstanceOf(ConnectTimeoutException::class, $e);
         self::assertSame(
-            'Страница limit 10 не загрузилась: повтор страницами по 5 (запрос 2 из 2) тоже превысил время ожидания. '
-            . 'GET https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=5&p=2: превышено время ожидания (cURL 28: Operation timed out)',
+            'Страница limit 10 не загрузилась: часть l=1&p=2 (оффер 2) превысила время ожидания, делить её дальше некуда '
+            . '(под-запросов: 3 из 20). GET ' . $url . ': превышено время ожидания (cURL 28: Operation timed out)',
             $e->getMessage(),
         );
-        self::assertSame($subTimeout, $e->getPrevious());
-        self::assertSame('https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=5&p=2', $e->url());
+        $previous = $e->getPrevious();
+        self::assertInstanceOf(TimeoutException::class, $previous);
+        self::assertSame($url, $previous->url());
+        self::assertSame($url, $e->url());
         self::assertSame('GET', $e->method());
         self::assertSame(28, $e->curlErrorCode());
-        self::assertCount(3, $inner->criteria());
+        self::assertSame([[10, 1], [5, 1], [1, 1], [1, 2]], self::requested($inner));
+    }
+
+    public function testSplitBeyondBudgetFailsBeforeSpendingRequests(): void
+    {
+        $inner = self::window([[20, 1], [5, 1], [5, 2], [5, 3], [5, 4]]);
+
+        $e = self::catchTimeout(new SplitOnTimeoutProductCatalog($inner), new SearchCriteria(limit: 20));
+
+        self::assertSame(
+            'Страница limit 20 не загрузилась: часть l=5&p=4 (офферы 16–20) превысила время ожидания, а на догрузку частями '
+            . 'по 1 не хватает под-запросов (нужно ещё 5, осталось 1 из 20). '
+            . 'GET https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=5&p=4: превышено время ожидания (cURL 28: Operation timed out)',
+            $e->getMessage(),
+        );
+        self::assertCount(20, $inner->criteria());
+    }
+
+    public function testNoRoomToSplitWhenAllRequestsArePlanned(): void
+    {
+        $inner = self::window([[100, 1], [5, 1]]);
+
+        $e = self::catchTimeout(new SplitOnTimeoutProductCatalog($inner), new SearchCriteria(limit: 100));
+
+        self::assertStringContainsString(
+            'часть l=5&p=1 (офферы 1–5) превысила время ожидания, а на догрузку частями по 1 не хватает под-запросов (нужно ещё 5, осталось 0 из 20)',
+            $e->getMessage(),
+        );
+        self::assertCount(2, $inner->criteria());
+    }
+
+    public function testConnectTimeoutOnPieceAfterSplitPassesThrough(): void
+    {
+        $connectTimeout = self::connectTimeoutException('https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=1&p=2');
+        $inner = new FakeProductCatalog([
+            self::timeout(),
+            self::timeout(),
+            self::page(1, 1, null),
+            static fn (): SearchResult => throw $connectTimeout,
+        ]);
+
+        try {
+            (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+            self::fail('ожидалось исключение');
+        } catch (ConnectTimeoutException $e) {
+            self::assertSame($connectTimeout, $e);
+        }
+        self::assertSame([[10, 1], [5, 1], [1, 1], [1, 2]], self::requested($inner));
+    }
+
+    public function testRateLimitOnPieceAfterSplitPassesThrough(): void
+    {
+        $rateLimit = new HttpException('GET …: HTTP 420', 420, 'GET', self::URL, 'Rate limit exceeded!');
+        $inner = new FakeProductCatalog([
+            self::timeout(),
+            self::timeout(),
+            self::page(1, 1, null),
+            static fn (): SearchResult => throw $rateLimit,
+        ]);
+
+        try {
+            (new SplitOnTimeoutProductCatalog($inner))->search(new SearchCriteria(limit: 10));
+            self::fail('ожидалось исключение');
+        } catch (HttpException $e) {
+            self::assertSame($rateLimit, $e);
+        }
+        self::assertCount(4, $inner->criteria());
     }
 
     /**
@@ -424,6 +645,28 @@ final class SplitOnTimeoutProductCatalogTest extends TestCase
     private static function timeout(): \Closure
     {
         return static fn (): SearchResult => throw self::timeoutException();
+    }
+
+    /**
+     * @param list<array{int, int}> $hanging
+     */
+    private static function window(array $hanging, int $available = 1000): FakeProductCatalog
+    {
+        $respond = static function (SearchCriteria $criteria) use ($hanging, $available): SearchResult {
+            $limit = $criteria->limit();
+            $page = $criteria->page();
+            if (in_array([$limit, $page], $hanging, true)) {
+                $url = sprintf('https://api.gdeslon.ru/api/search.xml?_gs_at=***&l=%d&p=%d', $limit, $page);
+
+                throw new TimeoutException(sprintf('GET %s: превышено время ожидания (cURL 28: Operation timed out)', $url), 'GET', $url, 28);
+            }
+            $from = ($page - 1) * $limit + 1;
+            $to = min($page * $limit, $available);
+
+            return new SearchResult($criteria, $from > $to ? [] : self::offers($from, $to), $available);
+        };
+
+        return new FakeProductCatalog(array_fill(0, 30, $respond));
     }
 
     /**

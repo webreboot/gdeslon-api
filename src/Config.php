@@ -6,6 +6,7 @@ namespace Webreboot\GdeSlon;
 
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
+use Webreboot\GdeSlon\Infrastructure\Http\RetryOnConnectTimeoutTransport;
 
 final class Config
 {
@@ -27,6 +28,7 @@ final class Config
         #[\SensitiveParameter]
         ?string $apiKey = null,
         private readonly ?int $searchFallbackLimit = 5,
+        private readonly int $connectRetries = 1,
     ) {
         if ($timeout <= 0 || $connectTimeout <= 0) {
             throw new InvalidArgumentException(sprintf(
@@ -50,6 +52,13 @@ final class Config
                 'searchFallbackLimit должен быть от 1 до %d или null, получено %d',
                 SearchCriteria::MAX_LIMIT,
                 $searchFallbackLimit,
+            ));
+        }
+        if ($connectRetries < 0 || $connectRetries > RetryOnConnectTimeoutTransport::MAX_RETRIES) {
+            throw new InvalidArgumentException(sprintf(
+                'connectRetries должен быть от 0 до %d, получено %d',
+                RetryOnConnectTimeoutTransport::MAX_RETRIES,
+                $connectRetries,
             ));
         }
         if ($apiToken !== null && trim($apiToken) === '') {
@@ -124,6 +133,11 @@ final class Config
         return $this->searchFallbackLimit;
     }
 
+    public function connectRetries(): int
+    {
+        return $this->connectRetries;
+    }
+
     /**
      * @return list<string>
      */
@@ -152,6 +166,7 @@ final class Config
             'userId' => $this->userId === null ? null : '***',
             'apiKey' => $this->apiKey === null ? null : '***',
             'searchFallbackLimit' => $this->searchFallbackLimit,
+            'connectRetries' => $this->connectRetries,
         ];
     }
 }

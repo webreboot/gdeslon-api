@@ -25,6 +25,7 @@ final class ConfigTest extends TestCase
         self::assertSame(16384, $config->rangeChunkSize());
         self::assertSame(86400, $config->cacheTtl());
         self::assertSame(5, $config->searchFallbackLimit());
+        self::assertSame(1, $config->connectRetries());
     }
 
     public function testRangeCanBeDisabledAndCacheAlwaysRevalidated(): void
@@ -253,5 +254,37 @@ final class ConfigTest extends TestCase
         self::assertSame(4, $config->__debugInfo()['searchFallbackLimit']);
         self::assertStringContainsString('[searchFallbackLimit] => 4', print_r($config, true));
         self::assertNull((new Config(searchFallbackLimit: null))->__debugInfo()['searchFallbackLimit']);
+    }
+
+    public function testConnectRetries(): void
+    {
+        self::assertSame(0, (new Config(connectRetries: 0))->connectRetries());
+        self::assertSame(5, (new Config(connectRetries: 5))->connectRetries());
+    }
+
+    #[DataProvider('invalidConnectRetries')]
+    public function testRejectsInvalidConnectRetries(int $retries): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('connectRetries должен быть от 0 до 5, получено %d', $retries));
+
+        new Config(connectRetries: $retries);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function invalidConnectRetries(): iterable
+    {
+        yield 'отрицательный' => [-1];
+        yield 'больше 5' => [6];
+    }
+
+    public function testConnectRetriesIsInDumps(): void
+    {
+        $config = new Config(apiToken: 'secret-token', connectRetries: 3);
+
+        self::assertSame(3, $config->__debugInfo()['connectRetries']);
+        self::assertStringContainsString('[connectRetries] => 3', print_r($config, true));
     }
 }

@@ -7,12 +7,14 @@ namespace Webreboot\GdeSlon\Tests\Integration\Infrastructure\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\RangeTransport;
+use Webreboot\GdeSlon\Infrastructure\Http\RetryOnConnectTimeoutTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Tests\Support\FakeRangeServer;
@@ -34,8 +36,10 @@ final class TransportFactoryTest extends TestCase
 
     public function testRangeIsOnByDefault(): void
     {
-        self::assertInstanceOf(RangeTransport::class, TransportFactory::fromConfig(new Config()));
-        self::assertInstanceOf(CurlTransport::class, TransportFactory::fromConfig(new Config(rangeChunkSize: null)));
+        self::assertInstanceOf(RetryOnConnectTimeoutTransport::class, TransportFactory::fromConfig(new Config()));
+        self::assertInstanceOf(RetryOnConnectTimeoutTransport::class, TransportFactory::fromConfig(new Config(rangeChunkSize: null)));
+        self::assertInstanceOf(RangeTransport::class, TransportFactory::fromConfig(new Config(connectRetries: 0)));
+        self::assertInstanceOf(CurlTransport::class, TransportFactory::fromConfig(new Config(rangeChunkSize: null, connectRetries: 0)));
     }
 
     public function testChunkSizeFromConfig(): void
@@ -62,12 +66,56 @@ final class TransportFactoryTest extends TestCase
         }
     }
 
-    public function testInnerReturnedAsIsWhenRangeDisabled(): void
+    public function testInnerReturnedAsIsWhenRangeAndRetriesDisabled(): void
     {
         $inner = new FakeHttpTransport();
 
-        self::assertSame($inner, TransportFactory::fromConfig(new Config(rangeChunkSize: null), $inner));
-        self::assertSame($inner, TransportFactory::fromConfig(new Config(rangeChunkSize: null), inner: $inner, rangeHosts: ['example.test']));
+        self::assertSame($inner, TransportFactory::fromConfig(new Config(rangeChunkSize: null, connectRetries: 0), $inner));
+        self::assertSame($inner, TransportFactory::fromConfig(new Config(rangeChunkSize: null, connectRetries: 0), inner: $inner, rangeHosts: ['example.test']));
+        self::assertInstanceOf(RetryOnConnectTimeoutTransport::class, TransportFactory::fromConfig(new Config(rangeChunkSize: null), $inner));
+    }
+
+    public function testConnectTimeoutOfInnerIsRetriedWithRange(): void
+    {
+        $inner = (new FakeHttpTransport())->willTimeOutOnConnect()->willReturn(200, '<yml_catalog/>');
+
+        $response = TransportFactory::fromConfig(new Config(), $inner)
+            ->send(HttpRequest::get('https://api.gdeslon.ru/api/search.xml', ['_gs_at' => 'secret-token', 'l' => 10, 'p' => 1]));
+
+        self::assertSame(200, $response->statusCode());
+        self::assertSame('<yml_catalog/>', $response->body());
+        self::assertCount(2, $inner->requests());
+        foreach ($inner->requests() as $request) {
+            self::assertSame('bytes=0-16383', $request->header('Range'));
+            self::assertSame('close', $request->header('Connection'));
+        }
+    }
+
+    public function testConnectTimeoutsOfContinuationPartRestartDownloadOnce(): void
+    {
+        $body = str_repeat('x', 40000);
+        $timeout = new ConnectTimeoutException('GET …: превышено время установки соединения', 'GET', 'https://api.gdeslon.ru/gdeslon-categories.json', 28);
+        $server = (new FakeRangeServer($body))->failPart(16384, $timeout, 3);
+
+        $response = TransportFactory::fromConfig(new Config(), $server)->send(HttpRequest::get('https://api.gdeslon.ru/gdeslon-categories.json'));
+
+        self::assertSame($body, $response->body());
+        self::assertSame(
+            ['bytes=0-16383', 'bytes=16384-32767', 'bytes=16384-32767', 'bytes=16384-32767', 'bytes=0-16383', 'bytes=16384-32767', 'bytes=32768-49151'],
+            $server->ranges(),
+        );
+    }
+
+    public function testPostThroughFactoryIsNotRetried(): void
+    {
+        $inner = (new FakeHttpTransport())->willTimeOutOnConnect();
+
+        try {
+            TransportFactory::fromConfig(new Config(connectRetries: 5), $inner)->send(HttpRequest::post('https://www.gdeslon.ru/api/v1/lost-orders/', '{}'));
+            self::fail('Ожидалось исключение');
+        } catch (ConnectTimeoutException) {
+        }
+        self::assertCount(1, $inner->requests());
     }
 
     public function testInnerPartsAreAssembled(): void
@@ -112,7 +160,7 @@ final class TransportFactoryTest extends TestCase
     {
         $inner = new FakeHttpTransport();
 
-        self::assertSame($inner, TransportFactory::fromConfig(new Config(rangeChunkSize: null), $inner, rangeHosts: []));
+        self::assertSame($inner, TransportFactory::fromConfig(new Config(rangeChunkSize: null, connectRetries: 0), $inner, rangeHosts: []));
 
         $this->expectException(InvalidArgumentException::class);
         TransportFactory::fromConfig(new Config(), $inner, rangeHosts: []);

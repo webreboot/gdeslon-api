@@ -242,9 +242,37 @@ final class HttpProductCatalogTest extends TestCase
         self::assertSame(2, $result->nextPage()?->page());
     }
 
-    public function testSecondTimeoutDuringSplitHidesToken(): void
+    public function testTimedOutPartIsReloadedPieceByPiece(): void
     {
         $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out after 30000 milliseconds with 0 bytes received')
+            ->willFail(28, 'Operation timed out after 30000 milliseconds with 0 bytes received');
+        for ($page = 1; $page <= 5; $page++) {
+            $transport->willReturn(200, Fixtures::read(sprintf('search/search-l1-p%d.xml', $page)));
+        }
+        $transport->willReturn(200, Fixtures::read('search/search-l5-p2.xml'));
+
+        $result = self::splitting($transport)->search(new SearchCriteria(query: 'платье', limit: 10));
+
+        self::assertSame(
+            [[10, 1], [5, 1], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [5, 2]],
+            array_map(static fn (HttpRequest $r): array => [$r->query()['l'] ?? null, $r->query()['p'] ?? null], $transport->requests()),
+        );
+        self::assertCount(10, $result);
+        self::assertSame('4717995399023499000', $result->offers()[0]->id());
+        self::assertSame('16501982560061594000', $result->offers()[4]->id());
+        self::assertSame('15344783908528867000', $result->offers()[5]->id());
+        self::assertMatchesRegularExpression('/\p{Cyrillic}/u', $result->offers()[0]->name());
+        self::assertSame(8203, $result->total());
+        self::assertSame(1, $result->effectiveLimit());
+        self::assertTrue($result->isDegraded());
+        self::assertSame(2, $result->nextPage()?->page());
+    }
+
+    public function testTimeoutOfLastPieceHidesToken(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willFail(28, 'Operation timed out')
             ->willFail(28, 'Operation timed out')
             ->willFail(28, 'Operation timed out');
 
@@ -252,15 +280,15 @@ final class HttpProductCatalogTest extends TestCase
             self::splitting($transport)->search(new SearchCriteria(limit: 10));
             self::fail('Ожидалось исключение');
         } catch (TimeoutException $e) {
-            self::assertStringContainsString('повтор страницами по 5 (запрос 1 из 2)', $e->getMessage());
-            self::assertStringContainsString('_gs_at=***&l=5&p=1', $e->url());
+            self::assertStringContainsString('часть l=1&p=1 (оффер 1) превысила время ожидания, делить её дальше некуда', $e->getMessage());
+            self::assertStringContainsString('_gs_at=***&l=1&p=1', $e->url());
             self::assertSame(28, $e->curlErrorCode());
             $previous = $e->getPrevious();
             self::assertInstanceOf(TimeoutException::class, $previous);
             self::assertNoToken($e);
             self::assertNoToken($previous);
         }
-        self::assertCount(2, $transport->requests());
+        self::assertCount(3, $transport->requests());
     }
 
     public function testRateLimitDuringSplitPassesThrough(): void

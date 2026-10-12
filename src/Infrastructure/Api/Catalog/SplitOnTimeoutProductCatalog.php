@@ -56,44 +56,94 @@ final class SplitOnTimeoutProductCatalog implements ProductCatalog
 
     private function searchInParts(SearchCriteria $criteria, int $subLimit): SearchResult
     {
-        $parts = intdiv($criteria->limit(), $subLimit);
-        $firstPage = ($criteria->page() - 1) * $parts + 1;
+        $queue = self::pieces($subLimit, $criteria->limit(), $criteria->page());
+        $sent = 0;
         $offers = [];
         $skipped = [];
         $total = null;
-        for ($part = 1; $part <= $parts; $part++) {
+        $loaded = false;
+        $smallest = $subLimit;
+        while ($queue !== []) {
+            [$size, $page] = array_shift($queue);
+            $sent++;
             try {
-                $result = $this->inner->search($criteria->withLimit($subLimit)->withPage($firstPage + $part - 1));
+                $result = $this->inner->search($criteria->withLimit($size)->withPage($page));
             } catch (ConnectTimeoutException $e) {
                 throw $e;
             } catch (TimeoutException $e) {
-                throw new TimeoutException(
-                    sprintf(
-                        'Страница limit %d не загрузилась: повтор страницами по %d (запрос %d из %d) тоже превысил время ожидания. %s',
-                        $criteria->limit(),
-                        $subLimit,
-                        $part,
-                        $parts,
-                        $e->getMessage(),
-                    ),
-                    $e->method(),
-                    $e->url(),
-                    $e->curlErrorCode(),
-                    $e,
-                );
+                $queue = [...self::split($criteria, $size, $page, $sent, count($queue), $e), ...$queue];
+
+                continue;
             }
 
-            if ($part === 1) {
+            if (!$loaded) {
                 $total = $result->total();
+                $loaded = true;
             }
+            $smallest = min($smallest, $size);
             array_push($offers, ...$result->offers());
             array_push($skipped, ...$result->skipped());
-            if (count($result) + count($result->skipped()) < $subLimit) {
+            if (count($result) + count($result->skipped()) < $size) {
                 break;
             }
         }
 
-        return new SearchResult($criteria, $offers, $total, $skipped, $subLimit);
+        return new SearchResult($criteria, $offers, $total, $skipped, $smallest);
+    }
+
+    /**
+     * @return list<array{int, int}>
+     */
+    private static function split(SearchCriteria $criteria, int $size, int $page, int $sent, int $queued, TimeoutException $e): array
+    {
+        $first = ($page - 1) * $size + 1;
+        $part = sprintf(
+            'часть l=%d&p=%d (%s) превысила время ожидания',
+            $size,
+            $page,
+            $size === 1 ? sprintf('оффер %d', $first) : sprintf('офферы %d–%d', $first, $page * $size),
+        );
+        if ($size === 1) {
+            throw self::pageFailed($criteria, $e, sprintf('%s, делить её дальше некуда (под-запросов: %d из %d)', $part, $sent, self::MAX_REQUESTS));
+        }
+
+        $pieceSize = self::largestDivisor($size, intdiv($size, 2));
+        $pieces = self::pieces($pieceSize, $size, $page);
+        $left = self::MAX_REQUESTS - $sent - $queued;
+        if (count($pieces) > $left) {
+            throw self::pageFailed($criteria, $e, sprintf(
+                '%s, а на догрузку частями по %d не хватает под-запросов (нужно ещё %d, осталось %d из %d)',
+                $part,
+                $pieceSize,
+                count($pieces),
+                $left,
+                self::MAX_REQUESTS,
+            ));
+        }
+
+        return $pieces;
+    }
+
+    /**
+     * @return list<array{int, int}>
+     */
+    private static function pieces(int $pieceSize, int $size, int $page): array
+    {
+        $count = intdiv($size, $pieceSize);
+        $first = ($page - 1) * $count + 1;
+
+        return array_map(static fn (int $k): array => [$pieceSize, $first + $k], range(0, $count - 1));
+    }
+
+    private static function pageFailed(SearchCriteria $criteria, TimeoutException $e, string $reason): TimeoutException
+    {
+        return new TimeoutException(
+            sprintf('Страница limit %d не загрузилась: %s. %s', $criteria->limit(), $reason, $e->getMessage()),
+            $e->method(),
+            $e->url(),
+            $e->curlErrorCode(),
+            $e,
+        );
     }
 
     private static function largestDivisor(int $limit, int $max): int

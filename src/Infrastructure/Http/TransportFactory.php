@@ -15,11 +15,10 @@ final class TransportFactory
     {
         $transport = $inner ?? CurlTransport::fromConfig($config);
         $chunkSize = $config->rangeChunkSize();
-
-        if ($chunkSize === null) {
-            return $transport;
+        if ($chunkSize !== null) {
+            $transport = new RangeTransport($transport, $chunkSize, hosts: $rangeHosts ?? RangeTransport::DEFAULT_HOSTS);
         }
 
-        return new RangeTransport($transport, $chunkSize, hosts: $rangeHosts ?? RangeTransport::DEFAULT_HOSTS);
+        return $config->connectRetries() > 0 ? new RetryOnConnectTimeoutTransport($transport, $config->connectRetries()) : $transport;
     }
 }

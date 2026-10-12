@@ -130,6 +130,31 @@ final class PublicApiTest extends TestCase
         }
     }
 
+    public function testReadmeDocumentsSplitAndConnectRetries(): void
+    {
+        $readme = (string) file_get_contents(dirname(__DIR__, 2) . '/README.md');
+
+        self::assertStringContainsString('| `connectRetries` |', self::section($readme, '## Конфигурация'));
+        $fallback = self::section($readme, '#### Повтор меньшими страницами');
+        foreach (['наименьший размер', '`searchFallbackLimit: 2`', 'не хватает под-запросов', '`connectRetries`'] as $expected) {
+            self::assertStringContainsString($expected, $fallback);
+        }
+        self::assertStringNotContainsString('(запрос k из n)', $fallback);
+        $transport = self::section($readme, '### Собственный транспорт');
+        self::assertStringContainsString('`RetryOnConnectTimeoutTransport`', $transport);
+        self::assertStringNotContainsString('он возвращается как есть', $transport);
+        $range = self::section($readme, '### Загрузка частями');
+        foreach (['keep-alive', '`connectRetries`', 'с начала'] as $expected) {
+            self::assertStringContainsString($expected, $range);
+        }
+        self::assertStringNotContainsString('первая часть не повторяется', $range);
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        foreach (['### Добавлено', '### Изменено', '`Config::connectRetries`', '`RetryOnConnectTimeoutTransport`', '`SearchResult::effectiveLimit()`', '### Переход с 0.3', '`connectRetries: 0`', '`searchFallbackLimit: null`'] as $expected) {
+            self::assertStringContainsString($expected, $unreleased);
+        }
+    }
+
     private static function section(string $markdown, string $heading): string
     {
         $start = strpos($markdown, "\n" . $heading . "\n");

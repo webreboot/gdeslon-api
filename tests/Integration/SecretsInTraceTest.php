@@ -60,7 +60,10 @@ final class SecretsInTraceTest extends TestCase
             static fn (FakeHttpTransport $t) => $t->willReturn(404, "There have been validation errors: [ { param: '_gs_at', msg: 'Invalid value', value: '" . self::TOKEN . "' } ]"),
             AuthenticationException::class,
         ];
-        yield 'таймаут' => [static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out')->willFail(28, 'Operation timed out'), TimeoutException::class];
+        yield 'таймаут' => [
+            static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out')->willFail(28, 'Operation timed out')->willFail(28, 'Operation timed out'),
+            TimeoutException::class,
+        ];
         yield 'таймаут, затем 500' => [
             static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out')->willReturn(500, '<h1>Internal Server Error</h1>'),
             HttpException::class,
@@ -70,6 +73,10 @@ final class SecretsInTraceTest extends TestCase
                 ->willReturn(200, Fixtures::read('search/search-l5-p1.xml'))
                 ->willReturn(420, 'Rate limit exceeded!'),
             HttpException::class,
+        ];
+        yield 'таймаут части, затем таймаут соединения' => [
+            static fn (FakeHttpTransport $t) => $t->willFail(28, 'Operation timed out')->willFail(28, 'Operation timed out')->willTimeOutOnConnect(),
+            ConnectTimeoutException::class,
         ];
         yield 'ошибка соединения' => [static fn (FakeHttpTransport $t) => $t->willFail(7), TransportException::class];
         yield 'таймаут соединения' => [static fn (FakeHttpTransport $t) => $t->willTimeOutOnConnect(), ConnectTimeoutException::class];
