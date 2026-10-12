@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Webreboot\GdeSlon\Tests\Unit\Interface\Normalizer;
 
 use PHPUnit\Framework\TestCase;
+use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
+use Webreboot\GdeSlon\Domain\Catalog\Offer;
 use Webreboot\GdeSlon\Domain\Catalog\RateType;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
@@ -33,6 +35,16 @@ use Webreboot\GdeSlon\Tests\Support\Fixtures;
 
 final class NormalizerTest extends TestCase
 {
+    public function testPlaceholderLinkEridIsNullInJson(): void
+    {
+        $offer = new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=None');
+
+        $json = CatalogNormalizer::offer($offer);
+
+        self::assertArrayHasKey('erid', $json);
+        self::assertNull($json['erid']);
+    }
+
     public function testValues(): void
     {
         self::assertSame(['amount' => '1999.99', 'currency' => 'RUR'], ValueNormalizer::money(new Money('1999.99', 'RUR')));

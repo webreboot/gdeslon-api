@@ -52,6 +52,39 @@ final class EridOnFixturesTest extends TestCase
         self::assertGreaterThanOrEqual(9, $checked);
     }
 
+    public function testEveryNonEmptyLinkEridIsAccepted(): void
+    {
+        $links = [];
+        foreach (glob(dirname(__DIR__, 3) . '/Fixtures/search/search*.xml') ?: [] as $path) {
+            foreach ((new OfferXmlParser())->parse(Fixtures::read('search/' . basename($path)), new SearchCriteria())->offers() as $offer) {
+                $links[] = $offer->link();
+            }
+        }
+        foreach (['shops.xml', 'shops-public.xml'] as $fixture) {
+            foreach ((new MerchantXmlParser())->parse(Fixtures::read('merchants/' . $fixture))->all() as $merchant) {
+                $links[] = $merchant->link();
+            }
+        }
+        foreach (['coupons.xml', 'coupons-broken.xml'] as $fixture) {
+            foreach ((new CouponXmlParser())->parse(Fixtures::read('coupons/' . $fixture), new CouponCriteria())->all() as $coupon) {
+                $links[] = $coupon->link();
+                $links[] = $coupon->linkWithCode();
+            }
+        }
+
+        $checked = 0;
+        foreach (array_filter($links) as $link) {
+            parse_str((string) parse_url($link->url(), PHP_URL_QUERY), $query);
+            $erid = $query['erid'] ?? '';
+            if (is_string($erid) && $erid !== '') {
+                self::assertSame($erid, $link->erid(), $link->url());
+                $checked++;
+            }
+        }
+
+        self::assertGreaterThanOrEqual(44, $checked);
+    }
+
     private static function assertMarkingMatchesLink(?string $marking, ?AffiliateLink $link, string $id): int
     {
         $erid = AdMarking::erid($marking);

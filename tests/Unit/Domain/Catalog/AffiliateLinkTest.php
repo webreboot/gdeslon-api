@@ -93,6 +93,42 @@ final class AffiliateLinkTest extends TestCase
         self::assertSame('2SDnjTEST010', AffiliateLink::fromString('https://x.ru/?erid=2SDnjTEST010&erid=2SDnjTEST011')->erid());
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function eridPlaceholders(): iterable
+    {
+        yield 'None' => ['https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=None&mid=1'];
+        yield 'null' => ['https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&goto=https%3A%2F%2Fx.ru&erid=null'];
+        yield 'undefined' => ['https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=undefined'];
+        yield 'NULL' => ['https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=NULL'];
+        yield 'без цифры' => ['https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=abcdEFGH'];
+    }
+
+    #[DataProvider('eridPlaceholders')]
+    public function testEridPlaceholderIsNull(string $url): void
+    {
+        self::assertNull(AffiliateLink::fromString($url)->erid());
+    }
+
+    public function testEridFirstParameterOnly(): void
+    {
+        self::assertNull(AffiliateLink::fromString('https://x.ru/?erid=None&erid=2SDnjX1')->erid());
+        self::assertSame('2SDnjX1', AffiliateLink::fromString('https://x.ru/?sub_id=None&erid=2SDnjX1')->erid());
+        self::assertSame('2024', AffiliateLink::fromString('https://x.ru/?erid=2024')->erid());
+    }
+
+    public function testSubIdKeepsLinkWithPlaceholderErid(): void
+    {
+        $placeholder = AffiliateLink::fromString('https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=None&mid=1')->withSubId('site');
+        self::assertSame('https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=None&mid=1&sub_id=site', $placeholder->url());
+        self::assertNull($placeholder->erid());
+
+        $replaced = AffiliateLink::fromString('https://x.ru/?sub_id=None&erid=2SDnjX1')->withSubId('site');
+        self::assertSame('https://x.ru/?sub_id=site&erid=2SDnjX1', $replaced->url());
+        self::assertSame('2SDnjX1', $replaced->erid());
+    }
+
     public function testMerchantId(): void
     {
         self::assertSame(107054, AffiliateLink::fromString(self::OFFER)->merchantId()?->value());

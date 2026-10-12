@@ -122,9 +122,18 @@ final class OfferTest extends TestCase
         self::assertSame('2SDnjLINK01', self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=2SDnjLINK01', $marking)->erid());
         self::assertNull(self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1', $marking)->erid());
 
-        foreach (['Реклама. ООО «Слон» erid 2SDnjcZ...', 'Реклама. ООО «Слон», erid: undefined'] as $broken) {
+        foreach (['Реклама. ООО «Слон» erid 2SDnjcZ...', 'Реклама. ООО «Слон», erid: undefined', 'Реклама. ООО «Слон» erid 2SDnj#TEST', 'Реклама. ООО «Слон» erid 2SDnj&shy;TEST01'] as $broken) {
             self::assertSame('2SDnjLINK01', self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=2SDnjLINK01', $broken)->erid(), $broken);
         }
+    }
+
+    public function testPlaceholderLinkEridIsNull(): void
+    {
+        $link = 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=None';
+
+        self::assertNull(self::offerWith($link, null)->erid());
+        self::assertSame('2SDnjMARK01', self::offerWith($link, 'Реклама. ООО «Слон», https://x.ru/ erid 2SDnjMARK01')->erid());
+        self::assertNull(self::offerWith($link, 'Реклама. Рекламодатель ООО «Слон» ИНН 7700000000 , https://x.ru')->erid());
     }
 
     public function testEridNullWhenNowhere(): void

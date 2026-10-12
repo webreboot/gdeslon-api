@@ -173,13 +173,14 @@ final class PublicApiTest extends TestCase
     public function testReadmeDocumentsEridRule(): void
     {
         $marking = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/README.md'), '#### Маркировка рекламы и erid');
-        foreach (['**первое**', '`ERID: 2SDn-TEST`', '`=`', '`&erid=`', 'хотя бы одна цифра', 'конец текста', 'многоточие'] as $expected) {
+        foreach (['**первое**', '`ERID: 2SDn-TEST`', '`=`', '`&erid=`', 'хотя бы одна цифра', 'конец текста', 'многоточие', '`erid 2SDnj#TEST`', '`p:erid=`', '`&nbsp;`', '`?erid=None`', 'link()->erid()', 'к букве или цифре'] as $expected) {
             self::assertStringContainsString($expected, $marking);
         }
         self::assertStringNotContainsString('последнее вхождение', $marking);
 
         $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
         self::assertStringContainsString('в четырёх местах', $unreleased);
+        self::assertStringContainsString('`AffiliateLink::erid()`', $unreleased);
         self::assertStringContainsString('`erid()`', $unreleased);
     }
 

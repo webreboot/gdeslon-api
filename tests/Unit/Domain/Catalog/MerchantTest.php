@@ -99,6 +99,27 @@ final class MerchantTest extends TestCase
         self::assertSame('2SDnjMARK02', $merchant->erid());
     }
 
+    public function testPlaceholderLinkEridIsNull(): void
+    {
+        $link = 'https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=undefined&mid=1';
+
+        self::assertNull((new Merchant(new MerchantId(1), 'x', 'https://x.ru/', affiliateLink: $link))->erid());
+        self::assertSame('Kra23MARK1', (new Merchant(new MerchantId(1), 'x', 'https://x.ru/', affiliateLink: $link, adMarking: 'Реклама. erid Kra23MARK1'))->erid());
+    }
+
+    public function testUrlEridInMarkingFallsBackToLink(): void
+    {
+        $merchant = new Merchant(
+            new MerchantId(1),
+            'x',
+            'https://x.ru/',
+            affiliateLink: 'https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=2SDnjLINK01&mid=1',
+            adMarking: 'Реклама. ООО «Слон», https://x.ru/p:erid=2SDnjURL01',
+        );
+
+        self::assertSame('2SDnjLINK01', $merchant->erid());
+    }
+
     public function testEridWithoutLink(): void
     {
         $merchant = new Merchant(new MerchantId(101124), 'x', 'https://aliexpress.ru/', adMarking: 'Реклама. ООО "АЛИБАБА.КОМ (РУ)", https://aliexpress.ru/. erid Kra2449mN');

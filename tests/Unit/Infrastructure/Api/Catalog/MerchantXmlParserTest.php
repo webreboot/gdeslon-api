@@ -113,6 +113,21 @@ final class MerchantXmlParserTest extends TestCase
         self::assertSame('r&amp;u', $m->country());
     }
 
+    public function testEridAfterEntityInMarking(): void
+    {
+        $shop = static fn (string $marking): string => '<shop><id>7</id><name>x</name><url>https://x.ru/</url>'
+            . '<affiliate-link>https://sf.gdeslon.ru/cf/0a1b2c3d4e?erid=Kra23LINK1&amp;mid=7</affiliate-link>'
+            . '<tagging_ads>' . $marking . '</tagging_ads></shop>';
+        $parse = static fn (string $marking) => (new MerchantXmlParser())->parse(self::shops($shop($marking)))->get(7);
+
+        $nbsp = $parse('Реклама. erid Kra23MARK1&amp;nbsp;');
+        self::assertSame('Реклама. erid Kra23MARK1&nbsp;', $nbsp->adMarking());
+        self::assertSame('Kra23MARK1', $nbsp->erid());
+        self::assertSame('Kra23LINK1', $parse('Реклама. erid Kra23&amp;shy;MARK1')->erid());
+        self::assertSame('Kra23LINK1', $parse('<![CDATA[Реклама. erid Kra23&shy;MARK1]]>')->erid());
+        self::assertSame('Kra23MARK1', $parse('<![CDATA[Реклама. erid Kra23MARK1&nbsp;]]>')->erid());
+    }
+
     public function testPlainTextNotDoubleDecoded(): void
     {
         $m = (new MerchantXmlParser())->parse(self::shops(
