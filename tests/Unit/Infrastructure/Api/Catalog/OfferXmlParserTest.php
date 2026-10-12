@@ -7,6 +7,7 @@ namespace Webreboot\GdeSlon\Tests\Unit\Infrastructure\Api\Catalog;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\Picture;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
@@ -174,6 +175,29 @@ final class OfferXmlParserTest extends TestCase
         self::assertNull($offer->originalPicture());
         self::assertNull($offer->productUrl());
         self::assertSame([], $offer->pictureCandidates());
+        self::assertSame([], $offer->pictures());
+    }
+
+    public function testPictureSourcesOnRealFixtures(): void
+    {
+        self::assertSame(
+            [
+                ['original_picture', 'https://cdn.amwine.ru/upload/iblock/e79/6xay7rt5fdrsuwy9vp3eqpwgxlskorle.png'],
+                ['picture', 'https://imgng.gdeslon.ru/commodities/406571949/pictures/75e8da9a3ca9e0c3a2dba8b146ddeb28/big.jpg'],
+                ['thumbnail', 'https://imgng.gdeslon.ru/commodities/406571949/pictures/75e8da9a3ca9e0c3a2dba8b146ddeb28/small.jpg'],
+            ],
+            self::sources(self::offer('14367733380732236000')),
+        );
+
+        $httpOriginal = self::sources(self::edgeOffer('10557192786987480000'));
+        self::assertSame(['original_picture', 'picture', 'thumbnail'], array_column($httpOriginal, 0));
+        self::assertSame('http://globaldrive.ru/upload/iblock/52a/ra9ou5fpl3qw06zreoe1394subz5tghx.jpg', $httpOriginal[0][1]);
+
+        self::assertSame(
+            [['picture', 'https://imgng.gdeslon.ru/commodities/477057687/pictures/None/big.jpg']],
+            self::sources(self::edgeOffer('1074890176067626600')),
+        );
+        self::assertSame([], self::edgeOffer('1732069055518743000')->pictures());
     }
 
     public function testEmptyPictureElements(): void
@@ -539,6 +563,14 @@ final class OfferXmlParserTest extends TestCase
         }
 
         throw new \LogicException('Нет оффера ' . $id);
+    }
+
+    /**
+     * @return list<array{string, string}>
+     */
+    private static function sources(Offer $offer): array
+    {
+        return array_map(static fn (Picture $p): array => [$p->source()->value, $p->url()], $offer->pictures());
     }
 
     private static function single(string $offer): Offer

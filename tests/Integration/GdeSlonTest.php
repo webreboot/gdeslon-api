@@ -12,6 +12,8 @@ use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\Picture;
+use Webreboot\GdeSlon\Domain\Catalog\PictureSource;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
@@ -408,6 +410,24 @@ final class GdeSlonTest extends TestCase
 
         $gdeslon->search(new SearchCriteria(query: 'тренч', categories: $subtree(1113)));
         self::assertSame('1113,1114,1128,1216,1217,1230,1231,1232,1522', $transport->lastRequest()->query()['tid']);
+    }
+
+    public function testSearchedOffersExposePictureSources(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willReturn(200, Fixtures::read('search/search-edge.xml'))
+            ->willReturn(200, Fixtures::read('search/search-empty.xml'));
+        $gdeslon = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport);
+
+        $sources = [];
+        foreach ($gdeslon->search('платье') as $offer) {
+            $sources['o' . $offer->id()] = array_map(static fn (Picture $p): PictureSource => $p->source(), $offer->pictures());
+        }
+
+        self::assertSame([PictureSource::Original, PictureSource::Picture, PictureSource::Thumbnail], $sources['o10557192786987480000']);
+        self::assertSame([PictureSource::Picture], $sources['o1074890176067626600']);
+        self::assertSame([], $sources['o1732069055518743000']);
+        self::assertTrue($gdeslon->search('платье')->isEmpty());
     }
 
     public function testCustomProductCatalog(): void

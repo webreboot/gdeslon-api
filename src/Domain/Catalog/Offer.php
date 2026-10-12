@@ -190,10 +190,30 @@ final class Offer
      */
     public function pictureCandidates(): array
     {
-        return array_values(array_unique(array_filter(
-            [$this->originalPicture, $this->picture, $this->thumbnail],
-            static fn (?string $url): bool => $url !== null,
-        )));
+        return array_map(static fn (Picture $picture): string => $picture->url(), $this->pictures());
+    }
+
+    /**
+     * @return list<Picture>
+     */
+    public function pictures(): array
+    {
+        $pictures = [];
+        $seen = [];
+        foreach (PictureSource::cases() as $source) {
+            $url = match ($source) {
+                PictureSource::Original => $this->originalPicture,
+                PictureSource::Picture => $this->picture,
+                PictureSource::Thumbnail => $this->thumbnail,
+            };
+            if ($url === null || in_array($url, $seen, true)) {
+                continue;
+            }
+            $seen[] = $url;
+            $pictures[] = new Picture($url, $source);
+        }
+
+        return $pictures;
     }
 
     private static function keyOf(MerchantId $merchantId, ?string $article): ?OfferKey

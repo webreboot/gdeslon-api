@@ -202,6 +202,7 @@ while (true) {
         $offer->key();            // ?OfferKey, '107054:578237' — для склейки повторов
         $offer->merchantId();
         $offer->pictureCandidates(); // list<string>: originalPicture → picture → thumbnail
+        $offer->pictures();          // list<Picture>: те же адреса с источником, см. «Картинки»
     }
     $next = $page->nextPage();    // ?SearchCriteria; глубина ограничена API: page × limit ≤ 10 000
     if ($next === null) {
@@ -278,23 +279,45 @@ new Config(apiToken: $token, searchFallbackLimit: null);   // без повто�
 
 #### Картинки
 
-`pictureCandidates()` — адреса картинок оффера по убыванию надёжности, без пустых и повторов; нет картинок — `[]`:
+`pictures()` — картинки оффера (`Picture`: `url()` и `source()`) по убыванию надёжности, без пустых и повторов; нет
+картинок — `[]`. `pictureCandidates()` — те же адреса без источника.
 
-1. `originalPicture()` — картинка с сайта магазина, бывает по `http://`;
-2. `picture()` — копия на `imgng.gdeslon.ru`, по наблюдениям ≈450 px;
-3. `thumbnail()` — миниатюра там же, по наблюдениям ≈100 px.
+1. `PictureSource::Original` (`originalPicture()`) — картинка с сайта магазина, бывает по `http://`;
+2. `PictureSource::Picture` (`picture()`) — копия на `imgng.gdeslon.ru`;
+3. `PictureSource::Thumbnail` (`thumbnail()`) — миниатюра там же.
 
-Размеры не документированы. `imgng.gdeslon.ru` отвечает 502 для части товаров, поэтому не встраивайте ссылки на
-картинки в страницы напрямую: скачивайте к себе с повторами и при ошибке берите следующий адрес.
+Если адрес совпадает у нескольких полей, он входит один раз — с источником выше в списке. Сравнение адресов точное.
+
+Размеры API не документирует. По проверке 2026-10-12: `picture` — ширина до 450 px, высота пропорциональна (бывает
+больше 1000 px), узкий оригинал не увеличивается; `thumbnail` — ширина 100 px; оригинал — как на сайте магазина
+(384–3 472 px в выборке). `thumbnail` — миниатюра для списков, а не запасная картинка карточки товара. За `.jpg`
+бывают PNG и WebP, а оригинал иногда отвечает 200 со страницей `text/html` — проверяйте `Content-Type`.
+
+`imgng.gdeslon.ru` отвечает 502 для большинства адресов, поэтому не встраивайте ссылки на картинки в страницы
+напрямую: скачивайте к себе с повторами и при ошибке берите следующий адрес. Чтобы позже заменить картинку на
+лучшую, храните её источник — `$picture->source()->value` (`original_picture`, `picture`, `thumbnail`; значения
+стабильны) — и сравнивайте через `isPreferredTo()`:
 
 ```php
-foreach ($offer->pictureCandidates() as $url) {
-    $image = $downloader->fetch($url);   // ваш HTTP-клиент: таймаут, повторы, проверка Content-Type
+use Webreboot\GdeSlon\Domain\Catalog\PictureSource;
+
+$stored = $row === null ? null : PictureSource::from($row['picture_source']);
+foreach ($offer->pictures() as $picture) {
+    if ($picture->source() === PictureSource::Thumbnail) {
+        break;                                   // миниатюра для карточки не годится
+    }
+    if ($stored !== null && !$picture->source()->isPreferredTo($stored)) {
+        break;                                   // лучше сохранённой картинки нет
+    }
+    $image = $downloader->fetch($picture->url());   // ваш HTTP-клиент: таймаут, повторы, проверка Content-Type
     if ($image !== null) {
+        $repository->savePicture($offer->key(), $image, $picture->source()->value);
         break;
     }
 }
 ```
+
+В минорной версии в `PictureSource` могут добавиться источники: в `match` по нему оставляйте ветку `default`.
 
 #### Тексты
 

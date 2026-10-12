@@ -13,6 +13,9 @@
   (в том числе заявка на потерянный заказ) не повторяется. Исчерпав попытки, бросает `ConnectTimeoutException`
   с «; попыток: N».
 - `Config::connectRetries` — число таких повторов, 0..5, по умолчанию 1.
+- `Offer::pictures()` — картинки оффера с источником: `Picture` (`url()`, `source()`) и enum `PictureSource`
+  (`Original`, `Picture`, `Thumbnail`; значения `original_picture`, `picture`, `thumbnail`) с `isPreferredTo()`.
+  Порядок и повторы — как у `pictureCandidates()`; при совпадении адресов остаётся источник выше по приоритету.
 - `CategoryTree::isReachable()` и `descendantsOf($id, reachableOnly: true)` — только достижимые категории: путь от
   существующего корня без архивных шагов и пропусков. Отсекает архивные ветки, «сирот» и их потомков; по умолчанию
   `descendantsOf()` не меняется.

@@ -6,6 +6,9 @@ namespace Webreboot\GdeSlon\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
+use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\Picture;
+use Webreboot\GdeSlon\Domain\Catalog\PictureSource;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
 use Webreboot\GdeSlon\Infrastructure\Clock\SystemClock;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
@@ -178,6 +181,22 @@ final class PublicApiTest extends TestCase
         $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
         self::assertStringContainsString('в четырёх местах', $unreleased);
         self::assertStringContainsString('`erid()`', $unreleased);
+    }
+
+    public function testPicturesArePublicApi(): void
+    {
+        self::assertTrue((new \ReflectionClass(Picture::class))->isFinal());
+        self::assertSame('string', (string) (new \ReflectionEnum(PictureSource::class))->getBackingType());
+        self::assertTrue((new \ReflectionMethod(Offer::class, 'pictures'))->isPublic());
+
+        $pictures = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/README.md'), '#### Картинки');
+        foreach (['pictures()', 'PictureSource::Original', 'isPreferredTo(', 'ширина до 450 px', 'ширина 100 px', 'WebP', 'imgng.gdeslon.ru', 'миниатюр', 'default', '=== PictureSource::Thumbnail'] as $expected) {
+            self::assertStringContainsString($expected, $pictures);
+        }
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        self::assertStringContainsString('`Offer::pictures()`', $unreleased);
+        self::assertStringContainsString('`PictureSource`', $unreleased);
     }
 
     private static function section(string $markdown, string $heading): string

@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\Picture;
 use Webreboot\GdeSlon\Domain\Catalog\OfferKey;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
@@ -288,6 +289,40 @@ final class OfferTest extends TestCase
         $offer = new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, picture: $picture, thumbnail: $thumbnail, originalPicture: $original);
 
         self::assertSame($expected, $offer->pictureCandidates());
+    }
+
+    /**
+     * @return iterable<string, array{?string, ?string, ?string, list<array{string, string}>}>
+     */
+    public static function pictureSetsWithSources(): iterable
+    {
+        yield 'все три' => ['https://p/big.jpg', 'https://p/small.jpg', 'https://o/a.png', [['https://o/a.png', 'original_picture'], ['https://p/big.jpg', 'picture'], ['https://p/small.jpg', 'thumbnail']]];
+        yield 'без оригинала' => ['https://p/big.jpg', 'https://p/small.jpg', null, [['https://p/big.jpg', 'picture'], ['https://p/small.jpg', 'thumbnail']]];
+        yield 'только миниатюра' => [null, 'https://p/small.jpg', null, [['https://p/small.jpg', 'thumbnail']]];
+        yield 'только оригинал' => [null, null, 'http://o/a.png', [['http://o/a.png', 'original_picture']]];
+        yield 'без картинок' => [null, null, null, []];
+        yield 'без средней' => [null, 'https://p/small.jpg', 'https://o/a.png', [['https://o/a.png', 'original_picture'], ['https://p/small.jpg', 'thumbnail']]];
+        yield 'picture = thumbnail' => ['https://p/a.jpg', 'https://p/a.jpg', null, [['https://p/a.jpg', 'picture']]];
+        yield 'original = picture' => ['https://p/a.jpg', 'https://p/small.jpg', 'https://p/a.jpg', [['https://p/a.jpg', 'original_picture'], ['https://p/small.jpg', 'thumbnail']]];
+        yield 'original = thumbnail' => ['https://p/big.jpg', 'https://p/a.jpg', 'https://p/a.jpg', [['https://p/a.jpg', 'original_picture'], ['https://p/big.jpg', 'picture']]];
+        yield 'все три равны' => ['https://p/a.jpg', 'https://p/a.jpg', 'https://p/a.jpg', [['https://p/a.jpg', 'original_picture']]];
+        yield 'схема различается' => ['https://x/a.jpg', null, 'http://x/a.jpg', [['http://x/a.jpg', 'original_picture'], ['https://x/a.jpg', 'picture']]];
+        yield 'регистр хоста различается' => ['https://x/a.jpg', null, 'https://X/a.jpg', [['https://X/a.jpg', 'original_picture'], ['https://x/a.jpg', 'picture']]];
+    }
+
+    /**
+     * @param list<array{string, string}> $expected
+     */
+    #[DataProvider('pictureSetsWithSources')]
+    public function testPicturesOrderSourcesAndDuplicates(?string $picture, ?string $thumbnail, ?string $original, array $expected): void
+    {
+        $offer = new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, picture: $picture, thumbnail: $thumbnail, originalPicture: $original);
+
+        $pictures = $offer->pictures();
+
+        self::assertSame($expected, array_map(static fn (Picture $p): array => [$p->url(), $p->source()->value], $pictures));
+        self::assertSame(array_map(static fn (Picture $p): string => $p->url(), $pictures), $offer->pictureCandidates());
+        self::assertEquals($pictures, $offer->pictures());
     }
 
     public function testPictureCandidatesAreUnique(): void
