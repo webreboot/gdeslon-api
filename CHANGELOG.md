@@ -3,9 +3,10 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/).
 До 1.0 публичный API может меняться в минорных версиях; такие изменения отмечаются здесь.
 
-## [Не выпущено]
+## [0.4.0] — 2026-10-12
 
-Поиск переживает зависание частей повтора, а таймаут соединения больше не роняет запрос с первой попытки.
+Поиск переживает зависание частей повтора и таймаут соединения; достижимые категории, источники картинок оффера и
+строгое правило erid в маркировке и ссылке.
 
 ### Добавлено
 
@@ -250,6 +251,7 @@
 - **MCP-сервер** `gdeslon mcp` для AI-агентов (Claude Desktop, Claude Code и др.): 11 инструментов чтения, MCP
   `2024-11-05`…`2025-11-25` и `2026-07-28`, маска секретов, страницы для длинных списков. См. [docs/mcp.md](docs/mcp.md).
 
+[0.4.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.4.0
 [0.3.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.3.0
 [0.2.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.2.0
 [0.1.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.1.0

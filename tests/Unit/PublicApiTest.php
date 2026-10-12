@@ -152,7 +152,7 @@ final class PublicApiTest extends TestCase
         }
         self::assertStringNotContainsString('первая часть не повторяется', $range);
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.4.0] — 2026-10-12');
         foreach (['### Добавлено', '### Изменено', '`Config::connectRetries`', '`RetryOnConnectTimeoutTransport`', '`SearchResult::effectiveLimit()`', '### Переход с 0.3', '`connectRetries: 0`', '`searchFallbackLimit: null`'] as $expected) {
             self::assertStringContainsString($expected, $unreleased);
         }
@@ -165,7 +165,7 @@ final class PublicApiTest extends TestCase
             self::assertStringContainsString($expected, $categories);
         }
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.4.0] — 2026-10-12');
         self::assertStringContainsString('`CategoryTree::isReachable()`', $unreleased);
         self::assertStringContainsString('reachableOnly: true', $unreleased);
     }
@@ -178,7 +178,7 @@ final class PublicApiTest extends TestCase
         }
         self::assertStringNotContainsString('последнее вхождение', $marking);
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.4.0] — 2026-10-12');
         self::assertStringContainsString('в четырёх местах', $unreleased);
         self::assertStringContainsString('`AffiliateLink::erid()`', $unreleased);
         self::assertStringContainsString('`erid()`', $unreleased);
@@ -195,7 +195,7 @@ final class PublicApiTest extends TestCase
             self::assertStringContainsString($expected, $pictures);
         }
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.4.0] — 2026-10-12');
         self::assertStringContainsString('`Offer::pictures()`', $unreleased);
         self::assertStringContainsString('`PictureSource`', $unreleased);
     }

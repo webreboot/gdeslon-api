@@ -47,7 +47,7 @@ use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 
 final class GdeSlon
 {
-    public const VERSION = '0.3.0';
+    public const VERSION = '0.4.0';
 
     private readonly CategoryRepository $categories;
 
