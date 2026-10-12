@@ -393,6 +393,23 @@ final class GdeSlonTest extends TestCase
         self::assertArrayNotHasKey('no_tid', $transport->lastRequest()->query());
     }
 
+    public function testSearchByReachableSubtreeSkipsOrphans(): void
+    {
+        $transport = (new FakeHttpTransport())
+            ->willReturn(200, Fixtures::read('categories/categories.json'))
+            ->willReturn(200, Fixtures::read('search/search-empty.xml'))
+            ->willReturn(200, Fixtures::read('search/search-empty.xml'));
+        $gdeslon = GdeSlon::create(new Config(apiToken: 'secret-token'), $transport);
+        $tree = $gdeslon->categories();
+        $subtree = static fn (int $id): array => [new CategoryId($id), ...array_map(static fn (Category $c): CategoryId => $c->id(), $tree->descendantsOf($id, reachableOnly: true))];
+
+        $gdeslon->search(new SearchCriteria(query: 'тренч', categories: $subtree(263)));
+        self::assertSame('263', $transport->lastRequest()->query()['tid'] ?? null);
+
+        $gdeslon->search(new SearchCriteria(query: 'тренч', categories: $subtree(1113)));
+        self::assertSame('1113,1114,1128,1216,1217,1230,1231,1232,1522', $transport->lastRequest()->query()['tid']);
+    }
+
     public function testCustomProductCatalog(): void
     {
         $transport = new FakeHttpTransport();

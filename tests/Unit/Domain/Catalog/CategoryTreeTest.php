@@ -329,6 +329,269 @@ final class CategoryTreeTest extends TestCase
         self::assertSame($tree->all(), iterator_to_array($copy, false));
     }
 
+    public function testRootAndItsDescendantsAreReachable(): void
+    {
+        $tree = self::tree();
+
+        foreach ([1113, 1216, 1217, 1230, 1231, 1232, 263] as $id) {
+            self::assertTrue($tree->isReachable($id), (string) $id);
+        }
+    }
+
+    public function testIsReachableAcceptsCategoryId(): void
+    {
+        self::assertTrue(self::tree()->isReachable(new CategoryId(1231)));
+        self::assertFalse(self::tree()->isReachable(new CategoryId(1052)));
+    }
+
+    public function testUnknownAndImpossibleIdsAreNotReachable(): void
+    {
+        foreach ([277, 99999, 0, -1] as $id) {
+            self::assertFalse(self::tree()->isReachable($id), (string) $id);
+        }
+        self::assertFalse((new CategoryTree([]))->isReachable(1));
+    }
+
+    public function testOrphansAreNotReachable(): void
+    {
+        $tree = self::tree();
+
+        foreach ([1052, 1054, 1992] as $id) {
+            self::assertFalse($tree->isReachable($id), (string) $id);
+        }
+        self::assertSame(
+            self::idsOf($tree->orphans()),
+            self::idsOf(array_values(array_filter($tree->all(), static fn (Category $c): bool => !$tree->isReachable($c->id())))),
+        );
+    }
+
+    public function testDescendantOfOrphanIsNotReachable(): void
+    {
+        $tree = new CategoryTree([
+            self::category(263, null, 'Спортивные товары', [263]),
+            self::category(1052, 277, 'Сушильные и гладильные машины', [263, 277, 1052]),
+            self::category(1053, 1052, 'Гладильные прессы', [263, 277, 1052, 1053]),
+        ]);
+
+        self::assertFalse($tree->isReachable(1052));
+        self::assertFalse($tree->isReachable(1053));
+    }
+
+    public function testArchivedLeafIsNotReachable(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1230, 1113, 'Верхняя одежда', [1113, 1230]),
+            self::category(1231, 1230, 'Парки', [1113, 1230, 1231], true),
+            self::category(1232, 1230, 'Плащи', [1113, 1230, 1232]),
+        ]);
+
+        self::assertFalse($tree->isReachable(1231));
+        self::assertTrue($tree->isReachable(1232));
+        self::assertTrue($tree->isReachable(1230));
+    }
+
+    public function testDescendantsOfArchivedCategoryAreNotReachable(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216], true),
+            self::category(1217, 1216, 'Для девочек', [1113, 1216, 1217]),
+            self::category(1230, 1217, 'Верхняя одежда', [1113, 1216, 1217, 1230]),
+        ]);
+
+        foreach ([1216, 1217, 1230] as $id) {
+            self::assertFalse($tree->isReachable($id), (string) $id);
+        }
+        self::assertTrue($tree->isReachable(1113));
+    }
+
+    public function testArchivedRootMakesWholeBranchUnreachable(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113], true),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216]),
+            self::category(263, null, 'Спортивные товары', [263]),
+        ]);
+
+        self::assertFalse($tree->isReachable(1113));
+        self::assertFalse($tree->isReachable(1216));
+        self::assertTrue($tree->isReachable(263));
+    }
+
+    public function testPathNotStartingAtRootIsNotReachable(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216]),
+            self::category(1300, 1216, 'Без корня', [1216, 1300]),
+        ]);
+        self::assertFalse($tree->isReachable(1300));
+
+        $cycle = new CategoryTree([
+            self::category(1, 2, 'А', [2, 1]),
+            self::category(2, 1, 'Б', [1, 2]),
+        ]);
+        self::assertFalse($cycle->isReachable(1));
+        self::assertFalse($cycle->isReachable(2));
+    }
+
+    public function testReachabilityFollowsPathNotParentChain(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216], true),
+            self::category(1230, 1216, 'Верхняя одежда', [1113, 1216, 1230]),
+            self::category(1231, 1230, 'Парки', [1113, 1230, 1231]),
+        ]);
+
+        self::assertFalse($tree->isReachable(1230));
+        self::assertTrue($tree->isReachable(1231));
+    }
+
+    public function testReachabilityDoesNotDependOnInputOrder(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1231, 1230, 'Парки', [1113, 1230, 1231]),
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1230, 1113, 'Верхняя одежда', [1113, 1230]),
+        ]);
+
+        foreach ([1231, 1113, 1230] as $id) {
+            self::assertTrue($tree->isReachable($id), (string) $id);
+        }
+    }
+
+    public function testDescendantsOfReachableOnlyDropArchivedBranch(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1114, 1113, 'Женская одежда', [1113, 1114]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216], true),
+            self::category(1217, 1216, 'Для девочек', [1113, 1216, 1217]),
+        ]);
+
+        self::assertSame([1114], self::idsOf($tree->descendantsOf(1113, reachableOnly: true)));
+        self::assertSame([1114, 1216, 1217], self::idsOf($tree->descendantsOf(1113)));
+    }
+
+    public function testDescendantsOfReachableOnlyDropOrphansAndTheirDescendants(): void
+    {
+        $tree = new CategoryTree([
+            self::category(263, null, 'Спортивные товары', [263]),
+            self::category(1052, 277, 'Сушильные и гладильные машины', [263, 277, 1052]),
+            self::category(1053, 1052, 'Гладильные прессы', [263, 277, 1052, 1053]),
+        ]);
+
+        self::assertSame([], $tree->descendantsOf(263, reachableOnly: true));
+        self::assertSame([1052, 1053], self::idsOf($tree->descendantsOf(263)));
+    }
+
+    public function testDescendantsOfReachableOnlyKeepInputOrderAndInstances(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1128, 1113, 'Мужская одежда', [1113, 1128]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216], true),
+            self::category(1114, 1113, 'Женская одежда', [1113, 1114]),
+        ]);
+
+        $descendants = $tree->descendantsOf(1113, reachableOnly: true);
+
+        self::assertSame([1128, 1114], self::idsOf($descendants));
+        self::assertSame($tree->get(1128), $descendants[0]);
+        self::assertSame($tree->get(1114), $descendants[1]);
+    }
+
+    public function testDescendantsOfUnreachableCategoryWithReachableOnlyIsEmpty(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216], true),
+            self::category(1217, 1216, 'Для девочек', [1113, 1216, 1217]),
+            self::category(1052, 277, 'Сушильные и гладильные машины', [263, 277, 1052]),
+            self::category(1053, 1052, 'Гладильные прессы', [263, 277, 1052, 1053]),
+        ]);
+
+        self::assertSame([], $tree->descendantsOf(1216, reachableOnly: true));
+        self::assertSame([], $tree->descendantsOf(1052, reachableOnly: true));
+        self::assertSame([1053], self::idsOf($tree->descendantsOf(1052)));
+        self::assertSame([], self::tree()->descendantsOf(1992, reachableOnly: true));
+    }
+
+    public function testDescendantsOfUnknownWithReachableOnlyThrows(): void
+    {
+        foreach ([[self::tree(), 277], [self::tree(), 0], [self::tree(), -1], [new CategoryTree([]), 1]] as [$tree, $id]) {
+            try {
+                $tree->descendantsOf($id, reachableOnly: true);
+                self::fail('Ожидалось исключение для ' . $id);
+            } catch (CategoryNotFoundException $e) {
+                self::assertSame($id, $e->categoryId());
+            }
+        }
+    }
+
+    public function testDescendantsOfReachableOnlyFalseEqualsDefault(): void
+    {
+        $tree = self::tree();
+
+        foreach ($tree->all() as $category) {
+            $default = $tree->descendantsOf($category->id());
+            self::assertSame($default, $tree->descendantsOf($category->id(), false));
+            self::assertSame($default, $tree->descendantsOf($category->id(), reachableOnly: false));
+        }
+    }
+
+    public function testDescendantsOfReachableOnlyOnCleanTreeEqualsFull(): void
+    {
+        $tree = new CategoryTree([
+            self::category(1113, null, 'Одежда', [1113]),
+            self::category(1216, 1113, 'Детская одежда', [1113, 1216]),
+            self::category(1217, 1216, 'Для девочек', [1113, 1216, 1217]),
+            self::category(263, null, 'Спортивные товары', [263]),
+        ]);
+
+        foreach ($tree->all() as $category) {
+            self::assertSame($tree->descendantsOf($category->id()), $tree->descendantsOf($category->id(), reachableOnly: true));
+        }
+    }
+
+    public function testWithOriginKeepsReachability(): void
+    {
+        $fresh = self::tree();
+        $computed = self::tree();
+        $computed->isReachable(1113);
+
+        foreach ([$fresh->withOrigin(DataOrigin::Stale), $computed->withOrigin(DataOrigin::Stale), unserialize(serialize($computed))] as $copy) {
+            self::assertInstanceOf(CategoryTree::class, $copy);
+            foreach ($fresh->all() as $category) {
+                self::assertSame($fresh->isReachable($category->id()), $copy->isReachable($category->id()));
+            }
+            self::assertSame([1216, 1217, 1230, 1231, 1232], self::idsOf($copy->descendantsOf(1113, reachableOnly: true)));
+            self::assertSame([], $copy->descendantsOf(263, reachableOnly: true));
+        }
+    }
+
+    public function testTreeSerializedWithoutReachabilityCacheComputesIt(): void
+    {
+        $serialized = serialize(self::tree());
+        $key = " " . CategoryTree::class . " reachable";
+        $pair = sprintf('s:%d:"%s";N;', strlen($key), $key);
+        self::assertStringContainsString($pair, $serialized);
+        $legacy = (string) preg_replace_callback(
+            '/^O:(\d+):"([^"]+)":(\d+):/',
+            static fn (array $m): string => sprintf('O:%s:"%s":%d:', $m[1], $m[2], (int) $m[3] - 1),
+            str_replace($pair, '', $serialized),
+        );
+
+        $restored = unserialize($legacy);
+
+        self::assertInstanceOf(CategoryTree::class, $restored);
+        self::assertTrue($restored->isReachable(1113));
+        self::assertFalse($restored->isReachable(1052));
+        self::assertSame([1216, 1217, 1230, 1231, 1232], self::idsOf($restored->descendantsOf(1113, reachableOnly: true)));
+    }
+
     private static function tree(): CategoryTree
     {
         return new CategoryTree([

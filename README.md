@@ -101,6 +101,8 @@ $tree->roots();
 $tree->childrenOf(1113);
 $tree->breadcrumbs(1231);         // list<Category> от корня
 $tree->descendantsOf(1114);       // list<Category>: всё поддерево без самой 1114
+$tree->descendantsOf(1114, reachableOnly: true);   // без архивных веток и «сирот»
+$tree->isReachable(1052);         // false: сирота; неизвестный ID — тоже false, без исключения
 $tree->orphans();                 // категории с отсутствующим в выгрузке родителем
 ```
 
@@ -110,8 +112,14 @@ $tree->orphans();                 // категории с отсутствую�
 входят. Поэтому «сирота» попадает в поддерево существующего предка из своего пути (`childrenOf()` и обход по
 `parentId()` её не находят). Несуществующий ID — `CategoryNotFoundException`.
 
-Поиск по категории (`tid`) берёт только саму категорию, без дочерних. Чтобы искать по разделу целиком, передайте всё
-поддерево:
+`descendantsOf($id, reachableOnly: true)` оставляет только достижимые категории: путь `path()` начинается с
+существующего корня, и каждый его шаг, включая саму категорию, есть в выгрузке и не в архиве. Так отсекаются архивные
+ветки, «сироты» и их потомки. Достижимость, как и само поддерево, считается по `path()`, а не по цепочке `parentId()`. Если недостижима сама `$id`, результат — `[]`; несуществующий ID — по-прежнему
+`CategoryNotFoundException`. Проверить одну категорию — `isReachable()`. CLI (`search --subcategories`) и MCP
+(`include_subcategories`) берут полное поддерево.
+
+Поиск по категории (`tid`) берёт только саму категорию, без дочерних. Чтобы искать по разделу целиком, передайте
+его достижимое поддерево (у сирот, по наблюдениям 2026-10-12, офферов нет):
 
 ```php
 use Webreboot\GdeSlon\Domain\Catalog\Category;
@@ -120,7 +128,10 @@ use Webreboot\GdeSlon\Domain\Catalog\CategoryId;
 $tree = $gdeslon->categories();
 $page = $gdeslon->search(new SearchCriteria(
     query: 'тренч',
-    categories: [new CategoryId(1114), ...array_map(static fn (Category $c): CategoryId => $c->id(), $tree->descendantsOf(1114))],
+    categories: [new CategoryId(1114), ...array_map(
+        static fn (Category $c): CategoryId => $c->id(),
+        $tree->descendantsOf(1114, reachableOnly: true),
+    )],
 ));
 ```
 

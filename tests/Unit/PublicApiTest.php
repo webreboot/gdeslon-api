@@ -155,6 +155,18 @@ final class PublicApiTest extends TestCase
         }
     }
 
+    public function testReadmeDocumentsReachableCategories(): void
+    {
+        $categories = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/README.md'), '### Категории');
+        foreach (['isReachable(', 'reachableOnly: true', '`CategoryNotFoundException`', '`[]`'] as $expected) {
+            self::assertStringContainsString($expected, $categories);
+        }
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        self::assertStringContainsString('`CategoryTree::isReachable()`', $unreleased);
+        self::assertStringContainsString('reachableOnly: true', $unreleased);
+    }
+
     private static function section(string $markdown, string $heading): string
     {
         $start = strpos($markdown, "\n" . $heading . "\n");

@@ -296,6 +296,77 @@ final class CategoryMapperTest extends TestCase
         self::assertSame('Категория', self::mapOne(array_merge(self::VALID, ['icon' => 'x.png', 'extra' => ['a' => 1]]))->name());
     }
 
+    public function testSyntheticUnreachableFixture(): void
+    {
+        $tree = (new CategoryMapper())->toTree(Fixtures::json('categories/categories-unreachable-synthetic.json'));
+
+        self::assertCount(11, $tree);
+        self::assertSame([11, 15, 20], self::idsOf(array_values(array_filter($tree->all(), static fn (Category $c): bool => $c->isArchived()))));
+        self::assertSame([17, 30], self::idsOf($tree->orphans()));
+        self::assertSame([11, 12, 13, 14, 15, 17, 18], self::idsOf($tree->descendantsOf(10)));
+        self::assertSame([13, 14], self::idsOf($tree->descendantsOf(10, reachableOnly: true)));
+        self::assertSame([10, 13, 14], self::idsOf(array_values(array_filter($tree->all(), static fn (Category $c): bool => $tree->isReachable($c->id())))));
+        self::assertSame([], $tree->descendantsOf(20, reachableOnly: true));
+        self::assertSame([21], self::idsOf($tree->descendantsOf(20)));
+        self::assertSame('Верхняя одежда', $tree->get(13)->name());
+        self::assertSame('Парки', $tree->get(14)->name());
+    }
+
+    /**
+     * @return iterable<string, array{bool|int|string|null, bool}>
+     */
+    public static function archivedFlagsReachability(): iterable
+    {
+        yield 'строка 1' => ['1', false];
+        yield 'число 1' => [1, false];
+        yield 'строка 0' => ['0', true];
+        yield 'число 0' => [0, true];
+        yield 'нет ключа' => [null, true];
+    }
+
+    #[DataProvider('archivedFlagsReachability')]
+    public function testArchivedFlagAsStringOrIntDecidesReachability(bool|int|string|null $flag, bool $reachable): void
+    {
+        $root = ['_id' => 1, 'parent_id' => null, 'name' => 'Корень', 'path' => [1]];
+        if ($flag !== null) {
+            $root['is_archived'] = $flag;
+        }
+        $child = ['_id' => 2, 'parent_id' => 1, 'name' => 'Ребёнок', 'is_archived' => false, 'path' => [1, 2]];
+
+        $tree = (new CategoryMapper())->toTree(['1' => $root, '2' => $child]);
+
+        self::assertSame($reachable, $tree->isReachable(1));
+        self::assertSame($reachable, $tree->isReachable(2));
+    }
+
+    public function testRealFixtureUnreachableAreExactlyOrphans(): void
+    {
+        $tree = self::fixtureTree();
+
+        self::assertSame(
+            [1052, 1992],
+            self::idsOf(array_values(array_filter($tree->all(), static fn (Category $c): bool => !$tree->isReachable($c->id())))),
+        );
+        self::assertSame(self::idsOf($tree->orphans()), [1052, 1992]);
+        self::assertSame([], $tree->descendantsOf(263, reachableOnly: true));
+        self::assertSame([1052], self::idsOf($tree->descendantsOf(263)));
+        self::assertSame($tree->descendantsOf(1113), $tree->descendantsOf(1113, reachableOnly: true));
+    }
+
+    public function testRealFixtureReachableDescendantsAreOrderedSubset(): void
+    {
+        $tree = self::fixtureTree();
+
+        foreach ($tree->all() as $category) {
+            $full = $tree->descendantsOf($category->id());
+            $reachable = $tree->descendantsOf($category->id(), reachableOnly: true);
+            $expected = $tree->isReachable($category->id())
+                ? array_values(array_filter($full, static fn (Category $c): bool => $tree->isReachable($c->id())))
+                : [];
+            self::assertSame($expected, $reachable, (string) $category->id()->value());
+        }
+    }
+
     private static function fixtureTree(): CategoryTree
     {
         return (new CategoryMapper())->toTree(Fixtures::json('categories/categories.json'));

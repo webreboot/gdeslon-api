@@ -23,6 +23,9 @@ final class CategoryTree implements \IteratorAggregate, \Countable
 
     private DataOrigin $origin = DataOrigin::Fetched;
 
+    /** @var array<int, true>|null */
+    private ?array $reachable = null;
+
     /**
      * @param iterable<Category> $categories
      */
@@ -88,13 +91,27 @@ final class CategoryTree implements \IteratorAggregate, \Countable
     /**
      * @return list<Category>
      */
-    public function descendantsOf(int|CategoryId $id): array
+    public function descendantsOf(int|CategoryId $id, bool $reachableOnly = false): array
     {
         if (!$this->has($id)) {
             throw CategoryNotFoundException::forId($id);
         }
+        $descendants = $this->descendantsByAncestor[self::value($id)] ?? [];
+        if (!$reachableOnly) {
+            return $descendants;
+        }
+        if (!$this->isReachable($id)) {
+            return [];
+        }
 
-        return $this->descendantsByAncestor[self::value($id)] ?? [];
+        return array_values(array_filter($descendants, fn (Category $category): bool => $this->isReachable($category->id())));
+    }
+
+    public function isReachable(int|CategoryId $id): bool
+    {
+        $this->reachable ??= $this->reachableIds();
+
+        return isset($this->reachable[self::value($id)]);
     }
 
     /**
@@ -148,6 +165,29 @@ final class CategoryTree implements \IteratorAggregate, \Countable
     public function getIterator(): \ArrayIterator
     {
         return new \ArrayIterator($this->all());
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    private function reachableIds(): array
+    {
+        $reachable = [];
+        foreach ($this->byId as $id => $category) {
+            $path = $category->path();
+            if (!($this->byId[$path[0]->value()] ?? null)?->isRoot()) {
+                continue;
+            }
+            foreach ($path as $step) {
+                $ancestor = $this->byId[$step->value()] ?? null;
+                if ($ancestor === null || $ancestor->isArchived()) {
+                    continue 2;
+                }
+            }
+            $reachable[$id] = true;
+        }
+
+        return $reachable;
     }
 
     private static function value(int|CategoryId $id): int
