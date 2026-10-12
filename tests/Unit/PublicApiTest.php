@@ -167,6 +167,19 @@ final class PublicApiTest extends TestCase
         self::assertStringContainsString('reachableOnly: true', $unreleased);
     }
 
+    public function testReadmeDocumentsEridRule(): void
+    {
+        $marking = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/README.md'), '#### Маркировка рекламы и erid');
+        foreach (['**первое**', '`ERID: 2SDn-TEST`', '`=`', '`&erid=`', 'хотя бы одна цифра', 'конец текста', 'многоточие'] as $expected) {
+            self::assertStringContainsString($expected, $marking);
+        }
+        self::assertStringNotContainsString('последнее вхождение', $marking);
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Не выпущено]');
+        self::assertStringContainsString('в четырёх местах', $unreleased);
+        self::assertStringContainsString('`erid()`', $unreleased);
+    }
+
     private static function section(string $markdown, string $heading): string
     {
         $start = strpos($markdown, "\n" . $heading . "\n");

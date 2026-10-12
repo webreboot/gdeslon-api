@@ -114,6 +114,18 @@ final class OfferTest extends TestCase
         self::assertSame('2SDnjLINK01', self::offerWith($link, 'Реклама. Рекламодатель ООО Eridanus ИНН 7700000000 , https://eridanus.ru')->erid());
     }
 
+    public function testTruncatedMarkingEridFallsBackToLink(): void
+    {
+        $marking = 'Реклама. Рекламодатель ООО «Слон» ERID: 2SDn-TEST';
+
+        self::assertSame('2SDnjLINK01', self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=2SDnjLINK01', $marking)->erid());
+        self::assertNull(self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1', $marking)->erid());
+
+        foreach (['Реклама. ООО «Слон» erid 2SDnjcZ...', 'Реклама. ООО «Слон», erid: undefined'] as $broken) {
+            self::assertSame('2SDnjLINK01', self::offerWith('https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=1&erid=2SDnjLINK01', $broken)->erid(), $broken);
+        }
+    }
+
     public function testEridNullWhenNowhere(): void
     {
         $link = 'https://af.gdeslon.ru/cm/0a1b2c3d4e/?mid=82012&goto=https%3A%2F%2Fs.click.aliexpress.com%2Fs%2FAbC';

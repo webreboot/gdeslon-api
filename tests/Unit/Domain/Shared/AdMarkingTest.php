@@ -23,6 +23,19 @@ final class AdMarkingTest extends TestCase
         yield 'заглавными' => ['Реклама. ERID 2SDnjTEST003', '2SDnjTEST003'];
         yield 'точка после значения' => ['Реклама. erid 2SDnjTEST004.', '2SDnjTEST004'];
         yield 'перевод строки' => ["Реклама.\nerid\t2SDnjTEST005\n", '2SDnjTEST005'];
+        yield 'знак равенства' => ['Реклама. ООО «Пример» erid=2SDnjTEST322', '2SDnjTEST322'];
+        yield 'равенство с пробелами' => ['Реклама. erid = 2SDnjTEST323', '2SDnjTEST323'];
+        yield 'двоеточие вплотную' => ['Реклама. ERID:2SDnjTEST325', '2SDnjTEST325'];
+        yield 'смешанный регистр' => ['Реклама. Erid 2SDnjTEST326', '2SDnjTEST326'];
+        yield 'неразрывный пробел' => ["Реклама. erid\u{00A0}2SDnjTEST324", '2SDnjTEST324'];
+        yield 'запятая и текст' => ['Реклама. erid 2SDnjTEST328, ИНН 7700000000', '2SDnjTEST328'];
+        yield 'в скобках' => ['Реклама (erid 2SDnjTEST329)', '2SDnjTEST329'];
+        yield 'в кавычках-ёлочках' => ['Реклама «erid 2SDnjTEST330»', '2SDnjTEST330'];
+        yield 'кириллица перед словом' => ['Реклама. ООО «Эрид» erid 2SDnjTEST327', '2SDnjTEST327'];
+        yield 'Kra' => ['Реклама. erid Kra2449mN', 'Kra2449mN'];
+        yield 'в кавычках-лапках' => ['Реклама „erid 2SDnjTEST01“', '2SDnjTEST01'];
+        yield 'перед HTML-тегом' => ['Реклама. erid 2SDnjTEST01<br>', '2SDnjTEST01'];
+        yield 'цифра в конце значения' => ['Реклама. erid abcdEFG1', 'abcdEFG1'];
     }
 
     #[DataProvider('realForms')]
@@ -50,6 +63,30 @@ final class AdMarkingTest extends TestCase
         yield 'значение без разделителя' => ['Реклама. erid2SDnjTEST001'];
         yield 'двоеточие без значения' => ['Реклама. erid: , https://x.ru'];
         yield 'битый UTF-8' => ["erid 2SDnjTEST001 \xff"];
+        yield 'дефис после значения' => ['Реклама. ERID: 2SDn-TEST'];
+        yield 'подчёркивание после значения' => ['Реклама. erid 2SDnj_TEST'];
+        yield 'косая черта после значения' => ['Реклама. erid 2SDnj/TEST'];
+        yield 'точка внутри значения' => ['Реклама. erid 2SDnj.TEST'];
+        yield 'процент после значения' => ['Реклама. erid=2SDnj%2BTEST'];
+        yield 'плюс после значения' => ['Реклама. erid 2SDnj+TEST'];
+        yield 'равенство после значения' => ['Реклама. erid=2SDnjTEST=='];
+        yield 'кириллица сразу после' => ['Реклама. erid 2SDnjTESTабв'];
+        yield 'равенство без значения' => ['Реклама. erid='];
+        yield 'слово как значение' => ['Реклама. erid: erid'];
+        yield 'sub_erid' => ['Реклама. sub_erid=2SDnjTEST331'];
+        yield 'дефис перед словом' => ['Реклама. x-erid 2SDnjTEST332'];
+        yield 'erid в адресе после ?' => ['Реклама. https://x.ru/?erid=2SDnjTEST330&utm=1'];
+        yield 'erid в адресе после &' => ['Реклама. https://x.ru/?a=1&erid=2SDnjTEST330'];
+        yield 'кавычка перед значением' => ['Реклама. erid «2SDnjTEST333»'];
+        yield 'кириллическая е в слове' => ["Реклама. \u{0435}rid 2SDnjTEST334"];
+        yield 'многоточие после значения' => ['Реклама. erid 2SDnjcZ...'];
+        yield 'две точки внутри значения' => ['Реклама. erid 2SDnj..TEST'];
+        yield 'знак Кельвина в значении' => ["Реклама. erid 2\u{212A}DnjTEST01"];
+        yield 'длинная s в значении' => ["Реклама. erid 2\u{017F}DnjTEST01"];
+        yield 'заглушка undefined' => ['Реклама. ООО «Пример», erid: undefined'];
+        yield 'заглушка null' => ['Реклама. ООО «Пример», erid: null'];
+        yield 'значение без цифры' => ['Реклама. erid abcdEFGH'];
+        yield 'тире после значения' => ['Реклама. erid 2SDnjTEST01—ООО'];
     }
 
     #[DataProvider('withoutErid')]
@@ -58,10 +95,62 @@ final class AdMarkingTest extends TestCase
         self::assertNull(AdMarking::erid($marking));
     }
 
-    public function testLastEridWins(): void
+    public function testFirstEridWins(): void
     {
-        self::assertSame('2SDnjSECOND', AdMarking::erid('Реклама. erid 2SDnjFIRST1, erid 2SDnjSECOND'));
+        self::assertSame('2SDnjFIRST1', AdMarking::erid('Реклама. erid 2SDnjFIRST1, erid 2SDnjSECOND'));
         self::assertSame('2SDnjTEST001', AdMarking::erid('Реклама. ООО Eridanus, https://eridanus.ru erid 2SDnjTEST001'));
+        self::assertSame('2SDnjTEST001', AdMarking::erid('Реклама. ООО «Erid Group», erid 2SDnjTEST001'));
+        self::assertSame('2SDnjTEST001', AdMarking::erid('Реклама. Рекламодатель Erid Labs ИНН 7700000000 erid 2SDnjTEST001'));
+    }
+
+    #[DataProvider('realForms')]
+    public function testFoundEridPassesIsErid(string $marking): void
+    {
+        self::assertTrue(AdMarking::isErid((string) AdMarking::erid($marking)));
+    }
+
+    public function testEmptyCandidateThenNext(): void
+    {
+        self::assertSame('2SDnjTEST333', AdMarking::erid('Реклама. erid: , erid 2SDnjTEST333'));
+        self::assertSame('2SDnjTEST334', AdMarking::erid('Реклама. erid: erid 2SDnjTEST334'));
+        self::assertSame('2SDnjTEST335', AdMarking::erid('Реклама. erid erid 2SDnjTEST335'));
+    }
+
+    public function testTruncatedThenValid(): void
+    {
+        self::assertSame('2SDnjTEST336', AdMarking::erid('Реклама. erid 2SDn-TEST, erid 2SDnjTEST336'));
+    }
+
+    public function testTextEridPreferredOverUrlInMarking(): void
+    {
+        self::assertSame('2SDnjTEXT001', AdMarking::erid('Реклама. https://x.ru/?erid=2SDnjURL0001&a=1 erid 2SDnjTEXT001'));
+        self::assertSame('2SDnjTEXT001', AdMarking::erid('Реклама. https://x.ru/?a=1&amp;erid=2SDnjURL0001&amp;b=2 erid 2SDnjTEXT001'));
+        self::assertSame('2SDnjTEXT001', AdMarking::erid('Реклама. https://x.ru/#erid=2SDnjURL0001 erid 2SDnjTEXT001'));
+        self::assertSame('2SDnjTEXT001', AdMarking::erid('Реклама. https://x.ru/p;erid=2SDnjURL0001 erid 2SDnjTEXT001'));
+        self::assertSame('2SDnjTEXT001', AdMarking::erid('Реклама. https://x.ru/p/erid=2SDnjURL0001 erid 2SDnjTEXT001'));
+    }
+
+    /**
+     * @return iterable<string, array{string, ?string}>
+     */
+    public static function consumerParity(): iterable
+    {
+        yield 'два erid' => ['Реклама. Рекламодатель ООО «Пример» erid 2SDnjTEST321A, erid 2SDnjTEST321B', '2SDnjTEST321A'];
+        yield 'erid=' => ['Реклама. Рекламодатель ООО «Пример» erid=2SDnjTEST322', '2SDnjTEST322'];
+        yield 'обрезанный' => ['Реклама. Рекламодатель ООО «Пример» ERID: 2SDn-TEST', null];
+    }
+
+    #[DataProvider('consumerParity')]
+    public function testConsumerParity(string $marking, ?string $erid): void
+    {
+        self::assertSame($erid, AdMarking::erid($marking));
+    }
+
+    public function testLongMarkingWithManyCandidates(): void
+    {
+        self::assertSame('2SDnjTEST337', AdMarking::erid(str_repeat('erid 2SDn-X ', 1000) . 'erid 2SDnjTEST337'));
+        self::assertSame(str_repeat('a', 63) . '1', AdMarking::erid('erid ' . str_repeat('a', 63) . '1'));
+        self::assertNull(AdMarking::erid('erid ' . str_repeat('a', 64) . '1 '));
     }
 
     public function testIsErid(): void

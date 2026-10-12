@@ -137,6 +137,7 @@ final class CouponTest extends TestCase
         self::assertSame('2SDnjTEST001', self::coupon(adMarking: null)->erid());
         self::assertSame('2SDnjMARK01', self::coupon(adMarking: 'Реклама. ООО "Пример". erid 2SDnjMARK01')->erid());
         self::assertSame('2SDnjTEST001', self::coupon(adMarking: 'Реклама. ООО Eridanus ИНН 7700000000, https://eridanus.ru/.')->erid());
+        self::assertSame('2SDnjTEST001', self::coupon(adMarking: 'Реклама. ООО "Пример". erid 2SDnj/TEST')->erid());
         self::assertNull(self::coupon(link: 'http://xf.gdeslon.ru/ck/0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e/336004', adMarking: null)->erid());
 
         $link = AffiliateLink::fromString(self::LINK);
