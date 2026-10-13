@@ -1031,4 +1031,4 @@ composer check   # phpstan level max + PHPUnit
 
 ## Лицензия
 
-MIT, © webreboot. «Где Слон?» — название и товарный знак их владельца.
+MIT, © [webreboot](https://webreboot.ru/). «Где Слон?» — название и товарный знак их владельца.
