@@ -232,7 +232,7 @@ final class PublicApiTest extends TestCase
             self::assertStringContainsString($expected, $feeds);
         }
 
-        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Unreleased]');
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.5.0] — 2026-10-14');
         foreach (['`GdeSlon::downloadFeed(FeedUrl $url, $xmlPath, ?FeedValidators $previous)`', '`FakeFeedDownloader`', '`gdeslon feed download [--feed=N] [--output=FILE]`', '`GdeSlon::openFeed($path)`', '`GdeSlon::unpackFeed($zip, $xml)`', '`OfferParam`', '`FakeProductFeed`', '`gdeslon feed stats <FILE>`'] as $expected) {
             self::assertStringContainsString($expected, $unreleased);
         }

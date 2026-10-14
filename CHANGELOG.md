@@ -3,7 +3,7 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/).
 До 1.0 публичный API может меняться в минорных версиях; такие изменения отмечаются здесь.
 
-## [Unreleased]
+## [0.5.0] — 2026-10-14
 
 Товарные выгрузки (фиды) из кабинета: загрузка частями с докачкой и условным запросом, чтение офферов с параметрами
 `param` и категорий без обхода поиска.
@@ -20,7 +20,6 @@
 - `FakeFeedDownloader` в `Webreboot\GdeSlon\Testing`.
 - CLI `gdeslon feed download [--feed=N] [--output=FILE]` — ссылки из `GDESLON_FEED_URLS` (через пробел), валидаторы в
   `FILE.meta.json`.
-
 - `GdeSlon::openFeed($path)` — потоковое чтение распакованной YML-выгрузки: порт `ProductFeed` с `generatedAt()`,
   `categories()` (`CategoryTree`), `offers()` (генератор `Offer`, память не растёт с размером файла), `skipped()` (до
   100 причин) и `skippedCount()`. Оффер с ценой 0 и битые записи пропускаются, как в поиске.
@@ -289,6 +288,7 @@
 - **MCP-сервер** `gdeslon mcp` для AI-агентов (Claude Desktop, Claude Code и др.): 11 инструментов чтения, MCP
   `2024-11-05`…`2025-11-25` и `2026-07-28`, маска секретов, страницы для длинных списков. См. [docs/mcp.md](docs/mcp.md).
 
+[0.5.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.5.0
 [0.4.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.4.0
 [0.3.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.3.0
 [0.2.0]: https://github.com/webreboot/gdeslon-api/releases/tag/v0.2.0
