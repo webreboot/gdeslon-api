@@ -49,6 +49,7 @@ final class Application
             new Command\CouponsListCommand(),
             new Command\CouponShowCommand(),
             new Command\CouponKindsCommand(),
+            new Command\FeedStatsCommand(),
             new Command\McpCommand(),
         ] as $command) {
             $commands[$command->name()] = $command;

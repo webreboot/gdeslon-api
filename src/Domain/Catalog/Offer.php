@@ -25,6 +25,12 @@ final class Offer
 
     private readonly ?OfferKey $key;
 
+    /** @var list<OfferParam> */
+    private readonly array $params;
+
+    /**
+     * @param list<OfferParam> $params
+     */
     public function __construct(
         private readonly string $id,
         private readonly MerchantId $merchantId,
@@ -44,6 +50,7 @@ final class Offer
         ?string $model = null,
         private readonly ?string $productUrl = null,
         ?string $adMarking = null,
+        array $params = [],
     ) {
         if (preg_match('/^\d{1,40}\z/', $id) !== 1) {
             throw new InvalidArgumentException(sprintf('ID оффера должен состоять из цифр, получено «%s»', $id));
@@ -78,6 +85,7 @@ final class Offer
         $this->vendor = self::text($vendor);
         $this->model = self::text($model);
         $this->adMarking = self::text($adMarking);
+        $this->params = $params;
     }
 
     public function id(): string
@@ -183,6 +191,41 @@ final class Offer
     public function adMarking(): ?string
     {
         return $this->adMarking;
+    }
+
+    /**
+     * @return list<OfferParam>
+     */
+    public function params(): array
+    {
+        return $this->params;
+    }
+
+    public function param(string $name, string ...$aliases): ?string
+    {
+        return $this->paramValues($name, ...$aliases)[0] ?? null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function paramValues(string $name, string ...$aliases): array
+    {
+        $values = [];
+        foreach ([$name, ...$aliases] as $wanted) {
+            $wanted = self::trimmed($wanted);
+            if ($wanted === '') {
+                continue;
+            }
+            $pattern = '/\A' . preg_quote($wanted, '/') . '\z/iu';
+            foreach ($this->params as $index => $param) {
+                if (!isset($values[$index]) && preg_match($pattern, $param->name()) === 1) {
+                    $values[$index] = $param->value();
+                }
+            }
+        }
+
+        return array_values($values);
     }
 
     /**

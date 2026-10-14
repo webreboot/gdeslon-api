@@ -52,6 +52,7 @@ use Webreboot\GdeSlon\Testing\FakeProductCatalog;
 use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\ZipBuilder;
 
 final class GdeSlonTest extends TestCase
 {
@@ -85,6 +86,28 @@ final class GdeSlonTest extends TestCase
         GdeSlon::create(new Config(timeout: 60.0), $transport);
 
         self::assertSame([], $transport->requests());
+    }
+
+    public function testUnpackAndOpenFeedWithoutKeysOrNetwork(): void
+    {
+        $dir = sys_get_temp_dir() . '/gdeslon-facade-feed-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        $transport = new FakeHttpTransport();
+        $gdeslon = GdeSlon::create(new Config(), $transport);
+
+        try {
+            $zip = (new ZipBuilder())->add('a1b2c3.xml', Fixtures::read('feeds/feed.xml'))->writeTo($dir . '/feed.zip');
+
+            self::assertSame(strlen(Fixtures::read('feeds/feed.xml')), $gdeslon->unpackFeed($zip, $dir . '/feed.xml'));
+            $feed = $gdeslon->openFeed($dir . '/feed.xml');
+
+            self::assertCount(21, iterator_to_array($feed->offers(), false));
+            self::assertCount(27, $feed->categories());
+            self::assertSame([], $transport->requests());
+        } finally {
+            array_map('unlink', glob($dir . '/*') ?: []);
+            rmdir($dir);
+        }
     }
 
     public function testCustomCategoryRepository(): void

@@ -14,12 +14,14 @@ use Webreboot\GdeSlon\Domain\Claims\LostOrderValidationException;
 use Webreboot\GdeSlon\Domain\Promo\CouponCriteriaRejectedException;
 use Webreboot\GdeSlon\Exception\AuthenticationException;
 use Webreboot\GdeSlon\Exception\ConnectTimeoutException;
+use Webreboot\GdeSlon\Exception\FileException;
 use Webreboot\GdeSlon\Exception\GdeSlonException;
 use Webreboot\GdeSlon\Exception\HttpException;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\TransportException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
+use Webreboot\GdeSlon\Exception\UnsupportedFormatException;
 use Webreboot\GdeSlon\Interface\Cli\MissingCredentialsException;
 use Webreboot\GdeSlon\Interface\Cli\OutputFailedException;
 use Webreboot\GdeSlon\Interface\Cli\UsageException;
@@ -53,6 +55,8 @@ final class ExceptionHierarchyTest extends TestCase
             HttpException::class,
             AuthenticationException::class,
             UnexpectedResponseException::class,
+            UnsupportedFormatException::class,
+            FileException::class,
             CategoryNotFoundException::class,
             MerchantNotFoundException::class,
             PostbackException::class,
@@ -86,6 +90,8 @@ final class ExceptionHierarchyTest extends TestCase
         self::assertTrue(self::extends(LostOrderValidationException::class, HttpException::class));
         self::assertTrue(self::extends(CouponCriteriaRejectedException::class, HttpException::class));
         self::assertTrue(self::extends(UsageException::class, \InvalidArgumentException::class));
+        self::assertTrue(self::extends(UnsupportedFormatException::class, \RuntimeException::class));
+        self::assertTrue(self::extends(FileException::class, \RuntimeException::class));
     }
 
     public function testTransportExceptionCarriesRequestAndCurlCode(): void

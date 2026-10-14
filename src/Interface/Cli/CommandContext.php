@@ -80,12 +80,12 @@ final class CommandContext
     /**
      * @param list<string> $skipped
      */
-    public function warnSkipped(array $skipped): void
+    public function warnSkipped(array $skipped, ?int $total = null): void
     {
         if ($skipped === []) {
             return;
         }
-        $this->notice(sprintf('Пропущено записей: %d', count($skipped)));
+        $this->notice(sprintf('Пропущено записей: %d', $total ?? count($skipped)));
         foreach (array_slice($skipped, 0, self::SKIPPED_SHOWN) as $reason) {
             $this->notice('  ' . $reason);
         }

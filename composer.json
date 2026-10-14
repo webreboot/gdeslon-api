@@ -45,6 +45,7 @@
         "psr/simple-cache": "^3.0"
     },
     "suggest": {
+        "ext-zlib": "Распаковка товарных выгрузок из zip-архива через GdeSlon::unpackFeed()",
         "psr/http-message": "Приём postback из PSR-7-запроса фреймворка через PostbackRequest::fromPsr7() (^1.1 || ^2.0)",
         "psr/simple-cache": "Кэш категорий в хранилище фреймворка через Psr16CacheStore (^1.0 || ^2.0 || ^3.0)"
     },

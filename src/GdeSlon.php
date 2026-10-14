@@ -9,6 +9,7 @@ use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantRepository;
 use Webreboot\GdeSlon\Domain\Catalog\ProductCatalog;
+use Webreboot\GdeSlon\Domain\Catalog\ProductFeed;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Domain\Claims\DuplicateLostOrderClaimException;
@@ -44,6 +45,8 @@ use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\Infrastructure\Clock\SystemClock;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
+use Webreboot\GdeSlon\Infrastructure\Yml\YmlProductFeed;
+use Webreboot\GdeSlon\Infrastructure\Yml\ZipEntryExtractor;
 
 final class GdeSlon
 {
@@ -117,6 +120,22 @@ final class GdeSlon
     public function categories(bool $refresh = false): CategoryTree
     {
         return $this->categories->all(refresh: $refresh);
+    }
+
+    /**
+     * @throws GdeSlonException
+     */
+    public function openFeed(string $path): ProductFeed
+    {
+        return YmlProductFeed::open($path);
+    }
+
+    /**
+     * @throws GdeSlonException
+     */
+    public function unpackFeed(string $zipPath, string $xmlPath): int
+    {
+        return (new ZipEntryExtractor())->extract($zipPath, $xmlPath);
     }
 
     /**

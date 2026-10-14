@@ -6,7 +6,10 @@ namespace Webreboot\GdeSlon\Tests\Unit\Testing;
 
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryTree;
+use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantList;
+use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\OfferParam;
 use Webreboot\GdeSlon\Domain\Catalog\SearchCriteria;
 use Webreboot\GdeSlon\Domain\Catalog\SearchResult;
 use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
@@ -25,12 +28,15 @@ use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Domain\Sales\OrderType;
 use Webreboot\GdeSlon\Domain\Shared\Money;
+use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\Testing\FakeCategoryRepository;
 use Webreboot\GdeSlon\Testing\FakeCouponFeed;
 use Webreboot\GdeSlon\Testing\FakeLostOrderClaims;
 use Webreboot\GdeSlon\Testing\FakeMerchantRepository;
 use Webreboot\GdeSlon\Testing\FakeOrderRepository;
 use Webreboot\GdeSlon\Testing\FakeProductCatalog;
+use Webreboot\GdeSlon\Testing\FakeProductFeed;
+use Webreboot\GdeSlon\Tests\Support\Fixtures;
 
 final class FakePortsTest extends TestCase
 {
@@ -49,6 +55,72 @@ final class FakePortsTest extends TestCase
 
         $this->expectException(\LogicException::class);
         $catalog->search($first);
+    }
+
+    public function testProductFeedFromObjects(): void
+    {
+        $offer = new Offer('1', new MerchantId(1), 'Платье', new Money('1499.00', 'RUB'), 'https://xf.gdeslon.ru/cm/0a1b2c3d4e/?mid=1', params: [new OfferParam('Цвет', 'Серый')]);
+        $tree = new CategoryTree([]);
+        $date = new \DateTimeImmutable('2026-10-13 21:50', new \DateTimeZone('Europe/Moscow'));
+        $feed = new FakeProductFeed([$offer], $tree, $date, ['оффер «2»: цена 0, оффер пропущен']);
+
+        self::assertSame([$offer], iterator_to_array($feed->offers(), false));
+        self::assertSame([$offer], iterator_to_array($feed->offers(), false));
+        self::assertSame(2, $feed->traversals());
+        self::assertSame($tree, $feed->categories());
+        self::assertSame($date, $feed->generatedAt());
+        self::assertSame(['оффер «2»: цена 0, оффер пропущен'], $feed->skipped());
+        self::assertSame(1, $feed->skippedCount());
+    }
+
+    public function testProductFeedDefaultsAreEmpty(): void
+    {
+        $feed = new FakeProductFeed();
+
+        self::assertSame([], iterator_to_array($feed->offers(), false));
+        self::assertCount(0, $feed->categories());
+        self::assertNull($feed->generatedAt());
+        self::assertSame(0, $feed->skippedCount());
+    }
+
+    public function testProductFeedFromYmlMatchesRealReader(): void
+    {
+        $feed = FakeProductFeed::fromYml(Fixtures::read('feeds/feed.xml'));
+
+        $offers = iterator_to_array($feed->offers(), false);
+        self::assertCount(21, $offers);
+        self::assertSame('86276:3080332', (string) $offers[0]->key());
+        self::assertSame('Серый', $offers[0]->param('Цвет'));
+        self::assertCount(27, $feed->categories());
+        self::assertSame('2026-10-13 21:50', $feed->generatedAt()?->format('Y-m-d H:i'));
+        self::assertSame(1, $feed->skippedCount());
+    }
+
+    public function testProductFeedFromYmlKeepsFullSkippedCount(): void
+    {
+        $offers = '';
+        for ($i = 1; $i <= 151; $i++) {
+            $offers .= sprintf(
+                '<offer id="%d" merchant_id="1" article="a%d" gs_category_id="1144"><name>x</name><url>https://xf.gdeslon.ru/cm/0a1b2c3d4e/?mid=1</url><currencyId>RUR</currencyId><categoryId>1144</categoryId><price>%s</price></offer>',
+                $i,
+                $i,
+                $i === 151 ? '10.00' : '0.00',
+            );
+        }
+
+        $feed = FakeProductFeed::fromYml('<yml_catalog><shop><offers>' . $offers . '</offers></shop></yml_catalog>');
+
+        self::assertSame(150, $feed->skippedCount());
+        self::assertCount(100, $feed->skipped());
+        self::assertSame(3, (new FakeProductFeed(skipped: ['a', 'b'], skippedCount: 3))->skippedCount());
+        self::assertSame(2, (new FakeProductFeed(skipped: ['a', 'b']))->skippedCount());
+    }
+
+    public function testProductFeedFromYmlRejectsBrokenFeed(): void
+    {
+        $this->expectException(UnexpectedResponseException::class);
+
+        FakeProductFeed::fromYml('<html/>');
     }
 
     public function testCategoryRepositoryCountsCallsAndRefresh(): void

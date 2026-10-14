@@ -9,8 +9,9 @@ use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\AffiliateLink;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantId;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
-use Webreboot\GdeSlon\Domain\Catalog\Picture;
 use Webreboot\GdeSlon\Domain\Catalog\OfferKey;
+use Webreboot\GdeSlon\Domain\Catalog\OfferParam;
+use Webreboot\GdeSlon\Domain\Catalog\Picture;
 use Webreboot\GdeSlon\Domain\Shared\Money;
 use Webreboot\GdeSlon\Exception\InvalidArgumentException;
 
@@ -40,6 +41,67 @@ final class OfferTest extends TestCase
         self::assertNull($offer->model());
         self::assertNull($offer->productUrl());
         self::assertNull($offer->adMarking());
+        self::assertSame([], $offer->params());
+    }
+
+    public function testParamsKeptInOrder(): void
+    {
+        $params = [new OfferParam('Сезон', 'Демисезон'), new OfferParam('Цвет', 'Серый'), new OfferParam('Размер', '50-52')];
+
+        $offer = self::offerWithParams(...$params);
+
+        self::assertSame($params, $offer->params());
+    }
+
+    public function testParamFindsNameIgnoringCase(): void
+    {
+        $offer = self::offerWithParams(new OfferParam('Цвет', 'Серый'), new OfferParam('Size', 'M'));
+
+        self::assertSame('Серый', $offer->param('Цвет'));
+        self::assertSame('Серый', $offer->param('цвет'));
+        self::assertSame('Серый', $offer->param('ЦВЕТ'));
+        self::assertSame('Серый', $offer->param(' цвет '));
+        self::assertSame('M', $offer->param('SIZE'));
+        self::assertNull($offer->param('Пол'));
+        self::assertNull($offer->param('Цве'));
+        self::assertNull($offer->param('Цвета'));
+    }
+
+    public function testParamTriesAliasesInOrder(): void
+    {
+        $offer = self::offerWithParams(new OfferParam('фильтр цвета', 'серый'), new OfferParam('Цвет', 'Графит'));
+
+        self::assertSame('Графит', $offer->param('Color', 'Цвет', 'фильтр цвета'));
+        self::assertSame('серый', $offer->param('Color', 'Фильтр цвета', 'Цвет'));
+        self::assertNull($offer->param('Color', 'Основной цвет'));
+    }
+
+    public function testParamDoesNotConfuseLookalikeNames(): void
+    {
+        $offer = self::offerWithParams(new OfferParam('коллекция', 'осень'), new OfferParam('Ёмкость', '1 л'));
+
+        self::assertNull($offer->param('Коллекции'));
+        self::assertSame('осень', $offer->param('КОЛЛЕКЦИЯ'));
+        self::assertNull($offer->param('Емкость'));
+        self::assertSame('1 л', $offer->param('ёмкость'));
+        self::assertNull($offer->param('.*'));
+        self::assertNull($offer->param(''));
+    }
+
+    public function testParamValuesCollectsAllMatchesInOrder(): void
+    {
+        $offer = self::offerWithParams(
+            new OfferParam('Размер', '42', 'RU'),
+            new OfferParam('Цвет', 'Серый'),
+            new OfferParam('размер', '44', 'RU'),
+            new OfferParam('Размер_RU', 'LRU SRU MRU'),
+        );
+
+        self::assertSame(['42', '44'], $offer->paramValues('Размер'));
+        self::assertSame(['42', '44', 'LRU SRU MRU'], $offer->paramValues('Размер', 'Размер_RU'));
+        self::assertSame(['LRU SRU MRU'], $offer->paramValues('размер_ru'));
+        self::assertSame(['42', '44'], $offer->paramValues('Размер', 'РАЗМЕР'));
+        self::assertSame([], $offer->paramValues('Пол'));
     }
 
     #[DataProvider('invalidOffers')]
@@ -353,5 +415,10 @@ final class OfferTest extends TestCase
     private static function offerWith(string $link, ?string $adMarking): Offer
     {
         return new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), $link, adMarking: $adMarking);
+    }
+
+    private static function offerWithParams(OfferParam ...$params): Offer
+    {
+        return new Offer('1', new MerchantId(1), 'x', new Money('1', 'RUB'), self::LINK, params: array_values($params));
     }
 }

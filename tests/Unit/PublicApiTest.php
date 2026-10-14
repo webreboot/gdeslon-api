@@ -7,9 +7,12 @@ namespace Webreboot\GdeSlon\Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Config;
 use Webreboot\GdeSlon\Domain\Catalog\Offer;
+use Webreboot\GdeSlon\Domain\Catalog\OfferParam;
 use Webreboot\GdeSlon\Domain\Catalog\Picture;
 use Webreboot\GdeSlon\Domain\Catalog\PictureSource;
+use Webreboot\GdeSlon\Domain\Catalog\ProductFeed;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
+use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Clock\SystemClock;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
@@ -198,6 +201,30 @@ final class PublicApiTest extends TestCase
         $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [0.4.0] — 2026-10-12');
         self::assertStringContainsString('`Offer::pictures()`', $unreleased);
         self::assertStringContainsString('`PictureSource`', $unreleased);
+    }
+
+    public function testFeedsArePublicApi(): void
+    {
+        self::assertTrue((new \ReflectionClass(ProductFeed::class))->isInterface());
+        self::assertTrue((new \ReflectionClass(OfferParam::class))->isFinal());
+        foreach (['openFeed', 'unpackFeed'] as $method) {
+            self::assertTrue((new \ReflectionMethod(GdeSlon::class, $method))->isPublic(), $method);
+        }
+        foreach (['params', 'param', 'paramValues'] as $method) {
+            self::assertTrue((new \ReflectionMethod(Offer::class, $method))->isPublic(), $method);
+        }
+        $parameters = (new \ReflectionMethod(Offer::class, '__construct'))->getParameters();
+        self::assertSame('params', $parameters[count($parameters) - 1]->getName(), 'новый параметр конструктора Offer — последним');
+
+        $feeds = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/README.md'), '### Товарные выгрузки');
+        foreach (['unpackFeed(', 'openFeed(', 'param(', 'paramValues(', 'key()', 'skippedCount()', 'UnsupportedFormatException', 'feed stats', 'секрет'] as $expected) {
+            self::assertStringContainsString($expected, $feeds);
+        }
+
+        $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Unreleased]');
+        foreach (['`GdeSlon::openFeed($path)`', '`GdeSlon::unpackFeed($zip, $xml)`', '`OfferParam`', '`FakeProductFeed`', '`gdeslon feed stats <FILE>`'] as $expected) {
+            self::assertStringContainsString($expected, $unreleased);
+        }
     }
 
     private static function section(string $markdown, string $heading): string

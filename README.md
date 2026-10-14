@@ -22,6 +22,7 @@ PHP SDK, CLI и MCP-сервер для API вебмастеров партнё�
 | Заказы | `orders()` | `POST https://gdeslon.ru/api/orders/` | HTTP Basic `userId:apiKey` |
 | Потерянные заказы | `lostOrders()`, `lostOrder()`, `submitLostOrderClaim()` | `GET`/`POST https://gdeslon.ru/api/v1/lost-orders/` | `Bearer` |
 | Купоны | `coupons()` | `GET https://gdeslon.ru/api/coupons.xml` | `api_token` |
+| Товарные выгрузки | `unpackFeed()`, `openFeed()` | файл по ссылке из кабинета (`export.gdeslon.ru`) | секрет в ссылке |
 | Postback | `PostbackReceiver` | входящий запрос от «Где Слон?» | секрет в заголовке |
 
 Ключи: токен XML API — https://gdeslon.ru/api_settings/xml (`api_token`, `_gs_at`, `Bearer`); ID пользователя и
@@ -641,6 +642,50 @@ $coupons->skipped();
 - Название, описание, инструкция, маркировка, вид и имена в справочниках — plain text (см. [Тексты](#тексты));
   `code()` и ссылки — как в ответе.
 
+### Товарные выгрузки
+
+Выгрузка (фид) — весь ассортимент выбранных магазинов одним YML-файлом с партнёрскими ссылками и параметрами товара
+(`param`: цвет, размер, пол…). Её создают в кабинете (https://gdeslon.ru/export_files/) и скачивают по постоянной
+ссылке `https://export.gdeslon.ru/uploads/exports/<секрет>.zip`. Ключи API не нужны; **ссылка сама — секрет**,
+храните её как токен. Файл — zip с одним XML внутри (41 МБ архива → ~350 МБ XML на ~140 тыс. офферов).
+
+```php
+$gdeslon->unpackFeed('/data/women.zip', '/data/women.xml'); // zip → XML потоково, нужно расширение zlib
+$feed = $gdeslon->openFeed('/data/women.xml');              // ProductFeed
+
+$feed->generatedAt();                    // ?DateTimeImmutable, Europe/Moscow
+$feed->categories();                     // CategoryTree — категории «Где Слон?» из выгрузки
+
+foreach ($feed->offers() as $offer) {    // генератор Offer, память не растёт с размером файла
+    $offer->key();                       // OfferKey — тот же, что у оффера из search()
+    $offer->param('Цвет');               // ?string, имя без учёта регистра
+    $offer->param('Цвет', 'фильтр цвета'); // первое найденное по списку имён
+    $offer->paramValues('Размер_RU');    // list<string> — значения всех одноимённых param
+    foreach ($offer->params() as $param) {
+        $param->name(); $param->value(); $param->unit(); // как в файле, без интерпретации
+    }
+    $offer->pictures();
+    $offer->link()->withSubId('capsule-12');
+    $offer->erid();
+}
+$feed->skippedCount();                   // после обхода: цена 0 и битые записи
+$feed->skipped();                        // первые 100 причин
+```
+
+- Оффер выгрузки — тот же `Offer`, что в поиске, с тем же ключом `merchant_id:article`, плюс `params()`. `id()`
+  у них **разный**: поиск округляет длинные id, ключ товара — `key()`. В выгрузке нет `available` и вознаграждения:
+  `isAvailable()` всегда `true`, `charge()` — `null`.
+- `param` отдаётся сырьём. Размеры у разных магазинов — в разных именах (`Размер`, `Размер_RU`, `Размер_US`), списком
+  через пробел с единицей в каждом значении (`LRU SRU MRU`, `38-40RU 36-38RU`); разбирать их — задача приложения.
+- `offers()` читает файл заново при каждом вызове. Битый XML (обрезанный файл) прерывает обход исключением **после**
+  уже выданных офферов — если пишете в базу по ходу, учитывайте это (транзакция или запись во временную таблицу).
+- `openFeed()` принимает только распакованный YML; zip, gzip и CSV — `UnsupportedFormatException`. Путь — локальный
+  файл; адреса и обёртки (`http://`, `php://`, `phar://`) отклоняются, XML разбирается без внешних сущностей и сети.
+- Из России соединение с хостом выгрузок обрывается на ~16 КБ — скачивать файл нужно частями `Range`
+  (см. [docs/gdeslon-api/feeds.md](docs/gdeslon-api/feeds.md)).
+- Оценить выгрузку без кода: `vendor/bin/gdeslon feed stats women.zip` — офферы, магазины, категории, частота `param`,
+  доли офферов с цветом, размером, полом и erid.
+
 ## Переход с 0.1.x
 
 Несовместимые изменения 0.2.0 — в [CHANGELOG.md](CHANGELOG.md#020--2026-10-11), раздел «Изменено». Чаще всего
@@ -876,6 +921,7 @@ SDK заменяет такие значения на `***` в `responseSnippet(
 | `InMemoryCacheStore` | `CacheStore` | кэш в памяти, `all()`; `failWrites()` — запись отказывает |
 | `FakeCategoryRepository`, `FakeMerchantRepository` | порты каталога | отдают переданный снимок; `calls()`, `lastRefresh()`, `lastPublic()` |
 | `FakeProductCatalog` | `ProductCatalog` | очередь страниц-замыканий `fn (SearchCriteria $c): SearchResult`; `criteria()` |
+| `FakeProductFeed` | `ProductFeed` | переданные офферы, категории, дата и пропуски; `FakeProductFeed::fromYml($xml)` и `fromYmlFile($path)` — разбор настоящим читателем; `traversals()` |
 | `FakeOrderRepository` | `OrderRepository` | переданные заказы на любой фильтр; `criteria()` |
 | `FakeCouponFeed` | `CouponFeed` | переданные купоны с отбором по магазинам фильтра; `criteria()` |
 | `FakeLostOrderClaims` | `LostOrderClaims` | заявки, отбор по магазину, состоянию и статусу; период не учитывается; поданная заявка получает следующий свободный номер от 9001 и видна в `find()` и `get()`; `submitted()`, `criteria()`, `failSubmitWith($exception)` |
@@ -971,6 +1017,7 @@ vendor/bin/gdeslon merchants --search=komus
 vendor/bin/gdeslon search платье красное --limit=20 --sort=price
 vendor/bin/gdeslon orders --days=7 --state=confirmed,paid
 vendor/bin/gdeslon coupons --active --format=json
+vendor/bin/gdeslon feed stats women.zip
 vendor/bin/gdeslon lost-orders submit --merchant=2573 --order-number=GS123L --order-date=2026-09-24 \
     --order-total=554.34 --attachment=receipt.pdf --dry-run
 ```

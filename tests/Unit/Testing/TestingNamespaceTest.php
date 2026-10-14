@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Domain\Catalog\CategoryRepository;
 use Webreboot\GdeSlon\Domain\Catalog\MerchantRepository;
 use Webreboot\GdeSlon\Domain\Catalog\ProductCatalog;
+use Webreboot\GdeSlon\Domain\Catalog\ProductFeed;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaims;
 use Webreboot\GdeSlon\Domain\Promo\CouponFeed;
 use Webreboot\GdeSlon\Domain\Sales\OrderRepository;
@@ -22,6 +23,7 @@ final class TestingNamespaceTest extends TestCase
         'FrozenClock' => Clock::class,
         'InMemoryCacheStore' => CacheStore::class,
         'FakeProductCatalog' => ProductCatalog::class,
+        'FakeProductFeed' => ProductFeed::class,
         'FakeCategoryRepository' => CategoryRepository::class,
         'FakeMerchantRepository' => MerchantRepository::class,
         'FakeOrderRepository' => OrderRepository::class,

@@ -55,12 +55,18 @@ final class SimpleXml
     public static function decodedText(\SimpleXMLElement $element, string $name): ?string
     {
         $child = self::child($element, $name);
-        $text = self::text($element, $name);
-        if ($child === null || $text === null) {
+
+        return $child === null ? null : self::decodedValue($child);
+    }
+
+    public static function decodedValue(\SimpleXMLElement $element): ?string
+    {
+        $text = (string) $element;
+        if (trim($text) === '') {
             return null;
         }
 
-        $xml = (string) $child->asXML();
+        $xml = (string) $element->asXML();
         if (!str_contains($xml, '<![CDATA[')) {
             return $text;
         }

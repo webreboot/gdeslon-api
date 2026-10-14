@@ -122,12 +122,12 @@ final class XmlRecordReader
         return new XmlRecords($records, $skipped, $captured);
     }
 
-    private static function allowedDoctypeInProlog(#[\SensitiveParameter] string $xml, string $allowedDoctype): bool
+    public static function allowedDoctypeInProlog(#[\SensitiveParameter] string $xml, string $allowedDoctype): bool
     {
         return preg_match('~\A(?:\xEF\xBB\xBF)?\s*(?:<\?xml\s[^>]*\?>\s*)?' . preg_quote($allowedDoctype, '~') . '~', $xml) === 1;
     }
 
-    private static function shownDoctype(#[\SensitiveParameter] string $xml): string
+    public static function shownDoctype(#[\SensitiveParameter] string $xml): string
     {
         if (preg_match('~<!DOCTYPE[^\[>]{0,200}~i', $xml, $match, PREG_OFFSET_CAPTURE) !== 1) {
             return '?';
