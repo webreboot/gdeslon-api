@@ -49,6 +49,7 @@ final class Application
             new Command\CouponsListCommand(),
             new Command\CouponShowCommand(),
             new Command\CouponKindsCommand(),
+            new Command\FeedDownloadCommand(),
             new Command\FeedStatsCommand(),
             new Command\McpCommand(),
         ] as $command) {
@@ -268,6 +269,7 @@ final class Application
             . "\nКлючи — только из окружения (или --env-file), не из аргументов:\n"
             . "  GDESLON_API_TOKEN                  токен XML API (https://gdeslon.ru/api_settings/xml)\n"
             . "  GDESLON_USER_ID, GDESLON_API_KEY   ключи API по продажам (https://gdeslon.ru/api_settings/orders)\n"
+            . "  GDESLON_FEED_URLS                  ссылки на выгрузки через пробел (https://gdeslon.ru/export_files/)\n"
             . "\nКоды выхода: 0 — успех, 1 — ошибка, 2 — неверный вызов, 3 — нет ключей или доступа,\n"
             . "  4 — заявка не подтверждена (НЕ повторять), 5 — заявка уже есть.\n";
 

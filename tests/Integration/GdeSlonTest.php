@@ -39,11 +39,15 @@ use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
 use Webreboot\GdeSlon\GdeSlon;
 use Webreboot\GdeSlon\Infrastructure\Cache\CachedDocument;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedValidators;
+use Webreboot\GdeSlon\Infrastructure\Feed\RangedFeedDownloader;
 use Webreboot\GdeSlon\Infrastructure\Http\CurlTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 use Webreboot\GdeSlon\Testing\FakeCategoryRepository;
 use Webreboot\GdeSlon\Testing\FakeCouponFeed;
+use Webreboot\GdeSlon\Testing\FakeFeedDownloader;
 use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Testing\FakeLostOrderClaims;
 use Webreboot\GdeSlon\Testing\FakeMerchantRepository;
@@ -108,6 +112,47 @@ final class GdeSlonTest extends TestCase
             array_map('unlink', glob($dir . '/*') ?: []);
             rmdir($dir);
         }
+    }
+
+    public function testDownloadFeedUsesInjectedDownloader(): void
+    {
+        $dir = sys_get_temp_dir() . '/gdeslon-facade-download-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        $downloader = (new FakeFeedDownloader())->willDownload(Fixtures::read('feeds/feed.xml'), new FeedValidators('"v1"', null));
+        $gdeslon = new GdeSlon(new FakeHttpTransport(), feedDownloader: $downloader);
+        $url = FeedUrl::fromString('https://export.gdeslon.ru/uploads/exports/Zk3secret0123456789.zip');
+
+        try {
+            $download = $gdeslon->downloadFeed($url, $dir . '/feed.xml');
+
+            self::assertSame('"v1"', $download->validators()->etag());
+            self::assertCount(21, iterator_to_array($gdeslon->openFeed($download->path())->offers(), false));
+            self::assertSame([['url' => $url->masked(), 'target' => $dir . '/feed.xml', 'previous' => null]], $downloader->downloads());
+        } finally {
+            array_map('unlink', glob($dir . '/*') ?: []);
+            rmdir($dir);
+        }
+    }
+
+    public function testCreateAcceptsConfiguredDownloader(): void
+    {
+        $downloader = RangedFeedDownloader::create(new Config(), concurrency: 2, partRetries: 5, maxBytes: 1000);
+        $gdeslon = GdeSlon::create(new Config(), new FakeHttpTransport(), feedDownloader: $downloader);
+
+        self::assertSame($downloader, (new \ReflectionProperty(GdeSlon::class, 'feedDownloader'))->getValue($gdeslon));
+        self::assertSame(2, (new \ReflectionProperty(RangedFeedDownloader::class, 'concurrency'))->getValue($downloader));
+        self::assertSame(5, (new \ReflectionProperty(RangedFeedDownloader::class, 'partRetries'))->getValue($downloader));
+        self::assertSame(1000, (new \ReflectionProperty(RangedFeedDownloader::class, 'maxBytes'))->getValue($downloader));
+    }
+
+    public function testCreateWiresRangedDownloaderFromConfig(): void
+    {
+        $gdeslon = GdeSlon::create(new Config(timeout: 12.0, rangeChunkSize: 4096), new FakeHttpTransport());
+
+        $downloader = (new \ReflectionProperty(GdeSlon::class, 'feedDownloader'))->getValue($gdeslon);
+
+        self::assertInstanceOf(RangedFeedDownloader::class, $downloader);
+        self::assertSame(4096, (new \ReflectionProperty(RangedFeedDownloader::class, 'chunkSize'))->getValue($downloader));
     }
 
     public function testCustomCategoryRepository(): void

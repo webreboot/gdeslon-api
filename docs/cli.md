@@ -19,11 +19,12 @@ vendor/bin/gdeslon help
 |---|---|---|
 | `GDESLON_API_TOKEN` | `search`, `coupons`, `lost-orders`; `merchants` — магазины вебмастера со ссылками | https://gdeslon.ru/api_settings/xml |
 | `GDESLON_USER_ID`, `GDESLON_API_KEY` | `orders` (задаются вместе) | https://gdeslon.ru/api_settings/orders |
+| `GDESLON_FEED_URLS` | `feed download` — ссылки на выгрузки через пробел (ссылка — секрет) | https://gdeslon.ru/export_files/ |
 
 `--env-file=PATH` — строки `KEY=VALUE` (`export `, комментарии `#`, кавычки `'…'`/`"…"` без подстановок, CRLF и BOM
 допускаются). Читаются только `GDESLON_*`; переменная окружения процесса важнее файла.
 
-Токен в выводе и сообщениях об ошибках заменяется на `***`.
+Токен, ключ и ссылки на выгрузки в выводе и сообщениях об ошибках заменяются на `***`.
 
 ## Вызов
 
@@ -167,6 +168,15 @@ API встраивает токен XML API в партнёрские ссылк
 ссылки — с `--reveal-links` (в stderr — предупреждение). Не публикуйте такие ссылки как есть. Рядом со ссылкой
 показывайте маркировку рекламы (`ad_marking`, erid).
 
+### `feed download [--feed=N] [--output=FILE]`
+
+Скачивает выгрузку по N-й ссылке из `GDESLON_FEED_URLS` (по умолчанию первой) в `FILE` (по умолчанию
+`gdeslon-feed-N.xml`); zip распаковывается. Части по 16 КиБ, 8 параллельно, каждая в новом соединении (из России
+хост рвёт соединение на ~16 КБ); сбой части повторяется, недокачанное остаётся в `FILE.zip.part` и докачивается
+следующим запуском. `ETag` и `Last-Modified` пишутся в `FILE.meta.json`: если выгрузка не пересобиралась, следующий
+запуск получает 304 и файл не трогает («Не изменилась», в JSON `status: not_modified`). Нет переменной — код 3;
+ссылки с таким номером нет или она не https — код 2. `--timeout` — время на одну часть.
+
 ### `feed stats <FILE>`
 
 Статистика товарной выгрузки из кабинета, ключи не нужны. `FILE` — YML (`.xml`) или zip-архив, как его отдаёт ссылка
@@ -212,6 +222,7 @@ MCP-сервер для AI-агентов: читает JSON-RPC из stdin, о�
 | `coupons` | `{"coupons": […], "kinds": […], "skipped": […]}` |
 | `coupons show` | `{"coupon": {…}}` |
 | `coupons kinds` | `{"kinds": [{id, name}]}` |
+| `feed download` | `{"status": "downloaded"\|"not_modified", "path", "bytes", "etag", "last_modified"}` |
 | `feed stats` | `{"generated_at", "offers", "skipped", "categories", "merchants": {count, top: [{merchant_id, offers}]}, "params": [{name, offers, share}], "coverage": {color, size, gender, erid: {offers, share}}}` |
 
 ### Поля

@@ -16,6 +16,7 @@ final class Environment
     public const USER_ID = 'GDESLON_USER_ID';
     public const API_KEY = 'GDESLON_API_KEY';
     public const CACHE_DIR = 'GDESLON_CACHE_DIR';
+    public const FEED_URLS = 'GDESLON_FEED_URLS';
 
     /**
      * @param array<string, string> $env
@@ -43,9 +44,28 @@ final class Environment
     /**
      * @return list<string>
      */
+    public function feedUrls(): array
+    {
+        return preg_split('/\s+/', $this->get(self::FEED_URLS) ?? '', -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    }
+
+    /**
+     * @return list<string>
+     */
     public function secrets(): array
     {
-        return array_values(array_filter([$this->token(), $this->apiKey()], static fn (?string $secret): bool => $secret !== null));
+        $secrets = array_values(array_filter([$this->token(), $this->apiKey()], static fn (?string $secret): bool => $secret !== null));
+        foreach ($this->feedUrls() as $url) {
+            $secrets[] = $url;
+            $name = basename((string) parse_url($url, PHP_URL_PATH));
+            foreach ([$name, pathinfo($name, PATHINFO_FILENAME)] as $part) {
+                if (strlen($part) >= 4) {
+                    $secrets[] = $part;
+                }
+            }
+        }
+
+        return array_values(array_unique($secrets));
     }
 
     public function cacheDirectory(): ?string

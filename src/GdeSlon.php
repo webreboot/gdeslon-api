@@ -43,6 +43,11 @@ use Webreboot\GdeSlon\Infrastructure\Api\Sales\HttpOrderRepository;
 use Webreboot\GdeSlon\Infrastructure\Cache\CacheStore;
 use Webreboot\GdeSlon\Infrastructure\Cache\DocumentCache;
 use Webreboot\GdeSlon\Infrastructure\Clock\SystemClock;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedDownload;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedDownloader;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedValidators;
+use Webreboot\GdeSlon\Infrastructure\Feed\RangedFeedDownloader;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
 use Webreboot\GdeSlon\Infrastructure\Yml\YmlProductFeed;
@@ -66,6 +71,8 @@ final class GdeSlon
 
     private readonly CouponFeed $coupons;
 
+    private readonly FeedDownloader $feedDownloader;
+
     public function __construct(
         HttpTransport $transport,
         ?CategoryRepository $categories = null,
@@ -75,6 +82,7 @@ final class GdeSlon
         ?LostOrderClaims $lostOrders = null,
         ?Clock $clock = null,
         ?CouponFeed $coupons = null,
+        ?FeedDownloader $feedDownloader = null,
     )
     {
         $client = new ApiClient($transport);
@@ -85,9 +93,10 @@ final class GdeSlon
         $this->lostOrders = $lostOrders ?? new HttpLostOrderClaims($client);
         $this->clock = $clock ?? new SystemClock();
         $this->coupons = $coupons ?? new HttpCouponFeed($client);
+        $this->feedDownloader = $feedDownloader ?? RangedFeedDownloader::create();
     }
 
-    public static function create(#[\SensitiveParameter] ?Config $config = null, ?HttpTransport $transport = null, ?CacheStore $cache = null, ?Clock $clock = null): self
+    public static function create(#[\SensitiveParameter] ?Config $config = null, ?HttpTransport $transport = null, ?CacheStore $cache = null, ?Clock $clock = null, ?FeedDownloader $feedDownloader = null): self
     {
         $config ??= new Config();
         $transport ??= TransportFactory::fromConfig($config);
@@ -111,6 +120,7 @@ final class GdeSlon
             new HttpLostOrderClaims($client, $config->apiToken(), $clock),
             $clock,
             new HttpCouponFeed($client, $config->apiToken()),
+            $feedDownloader ?? RangedFeedDownloader::create($config),
         );
     }
 
@@ -128,6 +138,14 @@ final class GdeSlon
     public function openFeed(string $path): ProductFeed
     {
         return YmlProductFeed::open($path);
+    }
+
+    /**
+     * @throws GdeSlonException
+     */
+    public function downloadFeed(#[\SensitiveParameter] FeedUrl $url, string $xmlPath, ?FeedValidators $previous = null): FeedDownload
+    {
+        return $this->feedDownloader->download($url, $xmlPath, $previous);
     }
 
     /**
@@ -219,7 +237,7 @@ final class GdeSlon
      */
     public function __sleep(): array
     {
-        $properties = ['merchants', 'products', 'orders', 'lostOrders', 'coupons', 'categories', 'clock'];
+        $properties = ['merchants', 'products', 'orders', 'lostOrders', 'coupons', 'categories', 'clock', 'feedDownloader'];
         foreach ($properties as $property) {
             try {
                 serialize($this->{$property});

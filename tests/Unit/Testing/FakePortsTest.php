@@ -28,8 +28,13 @@ use Webreboot\GdeSlon\Domain\Sales\OrderCriteria;
 use Webreboot\GdeSlon\Domain\Sales\OrderState;
 use Webreboot\GdeSlon\Domain\Sales\OrderType;
 use Webreboot\GdeSlon\Domain\Shared\Money;
+use Webreboot\GdeSlon\Exception\TimeoutException;
 use Webreboot\GdeSlon\Exception\UnexpectedResponseException;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedDownloadStatus;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedValidators;
 use Webreboot\GdeSlon\Testing\FakeCategoryRepository;
+use Webreboot\GdeSlon\Testing\FakeFeedDownloader;
 use Webreboot\GdeSlon\Testing\FakeCouponFeed;
 use Webreboot\GdeSlon\Testing\FakeLostOrderClaims;
 use Webreboot\GdeSlon\Testing\FakeMerchantRepository;
@@ -114,6 +119,51 @@ final class FakePortsTest extends TestCase
         self::assertCount(100, $feed->skipped());
         self::assertSame(3, (new FakeProductFeed(skipped: ['a', 'b'], skippedCount: 3))->skippedCount());
         self::assertSame(2, (new FakeProductFeed(skipped: ['a', 'b']))->skippedCount());
+    }
+
+    public function testFeedDownloaderQueuesResultsAndWritesTarget(): void
+    {
+        $dir = sys_get_temp_dir() . '/gdeslon-fake-download-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        $url = FeedUrl::fromString('https://export.gdeslon.ru/uploads/exports/Zk3secret0123456789.zip');
+        $validators = new FeedValidators('"v1"', 'Wed, 14 Oct 2026 09:48:14 GMT');
+        $downloader = (new FakeFeedDownloader())
+            ->willDownload('<yml_catalog/>', $validators)
+            ->willReturnNotModified()
+            ->willThrow(new TimeoutException('таймаут', 'GET', $url->masked(), 28));
+
+        try {
+            $first = $downloader->download($url, $dir . '/feed.xml');
+            self::assertSame(FeedDownloadStatus::Downloaded, $first->status());
+            self::assertSame('<yml_catalog/>', file_get_contents($dir . '/feed.xml'));
+            self::assertSame(14, $first->bytes());
+            self::assertSame($validators, $first->validators());
+
+            $second = $downloader->download($url, $dir . '/feed.xml', $validators);
+            self::assertTrue($second->isNotModified());
+            self::assertSame($validators->toArray(), $second->validators()->toArray());
+
+            try {
+                $downloader->download($url, $dir . '/feed.xml');
+                self::fail('ожидалось исключение');
+            } catch (TimeoutException) {
+            }
+
+            self::assertSame(
+                [
+                    ['url' => 'https://export.gdeslon.ru/uploads/exports/***', 'target' => $dir . '/feed.xml', 'previous' => null],
+                    ['url' => 'https://export.gdeslon.ru/uploads/exports/***', 'target' => $dir . '/feed.xml', 'previous' => $validators],
+                    ['url' => 'https://export.gdeslon.ru/uploads/exports/***', 'target' => $dir . '/feed.xml', 'previous' => null],
+                ],
+                $downloader->downloads(),
+            );
+
+            $this->expectException(\LogicException::class);
+            $downloader->download($url, $dir . '/feed.xml');
+        } finally {
+            @unlink($dir . '/feed.xml');
+            rmdir($dir);
+        }
     }
 
     public function testProductFeedFromYmlRejectsBrokenFeed(): void

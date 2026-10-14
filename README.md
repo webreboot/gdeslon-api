@@ -22,7 +22,7 @@ PHP SDK, CLI и MCP-сервер для API вебмастеров партнё�
 | Заказы | `orders()` | `POST https://gdeslon.ru/api/orders/` | HTTP Basic `userId:apiKey` |
 | Потерянные заказы | `lostOrders()`, `lostOrder()`, `submitLostOrderClaim()` | `GET`/`POST https://gdeslon.ru/api/v1/lost-orders/` | `Bearer` |
 | Купоны | `coupons()` | `GET https://gdeslon.ru/api/coupons.xml` | `api_token` |
-| Товарные выгрузки | `unpackFeed()`, `openFeed()` | файл по ссылке из кабинета (`export.gdeslon.ru`) | секрет в ссылке |
+| Товарные выгрузки | `downloadFeed()`, `unpackFeed()`, `openFeed()` | `GET https://export.gdeslon.ru/uploads/exports/<секрет>.zip` частями `Range` | секрет в ссылке |
 | Postback | `PostbackReceiver` | входящий запрос от «Где Слон?» | секрет в заголовке |
 
 Ключи: токен XML API — https://gdeslon.ru/api_settings/xml (`api_token`, `_gs_at`, `Bearer`); ID пользователя и
@@ -650,7 +650,20 @@ $coupons->skipped();
 храните её как токен. Файл — zip с одним XML внутри (41 МБ архива → ~350 МБ XML на ~140 тыс. офферов).
 
 ```php
-$gdeslon->unpackFeed('/data/women.zip', '/data/women.xml'); // zip → XML потоково, нужно расширение zlib
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedValidators;
+
+$download = $gdeslon->downloadFeed(
+    FeedUrl::fromString(getenv('GDESLON_FEED_URL')),     // https; в логах — masked(): …/uploads/exports/***
+    '/data/women.xml',                                  // zip распаковывается сюда, нужно расширение zlib
+    FeedValidators::fromArray($state),                  // ETag и Last-Modified прошлой загрузки (или null)
+);
+if ($download->isNotModified()) {
+    return;                                             // выгрузка не пересобиралась, файл не тронут
+}
+$state = $download->validators()->toArray();            // сохраните до следующего запуска
+
+$gdeslon->unpackFeed('/data/women.zip', '/data/women.xml'); // если zip скачан иначе
 $feed = $gdeslon->openFeed('/data/women.xml');              // ProductFeed
 
 $feed->generatedAt();                    // ?DateTimeImmutable, Europe/Moscow
@@ -681,8 +694,23 @@ $feed->skipped();                        // первые 100 причин
   уже выданных офферов — если пишете в базу по ходу, учитывайте это (транзакция или запись во временную таблицу).
 - `openFeed()` принимает только распакованный YML; zip, gzip и CSV — `UnsupportedFormatException`. Путь — локальный
   файл; адреса и обёртки (`http://`, `php://`, `phar://`) отклоняются, XML разбирается без внешних сущностей и сети.
-- Из России соединение с хостом выгрузок обрывается на ~16 КБ — скачивать файл нужно частями `Range`
-  (см. [docs/gdeslon-api/feeds.md](docs/gdeslon-api/feeds.md)).
+- `downloadFeed()` качает частями по `Config::rangeChunkSize` (16 КиБ), 8 параллельно, каждую в новом соединении:
+  из России соединение с хостом выгрузок обрывается на ~16 КБ ([docs/gdeslon-api/feeds.md](docs/gdeslon-api/feeds.md)).
+  41 МБ — 2–4 минуты (проверено из РФ: 3 мин 50 с). Время на одну часть — `Config::timeout`. Первая часть уходит с
+  `If-None-Match`/`If-Modified-Since` (если файл и валидаторы есть): 304 — `isNotModified()`, файл не тронут.
+  Выгрузка пересобирается примерно раз в сутки.
+- Сбой части (таймаут, обрыв соединения, 420/429/5xx) повторяется 3 раза с паузой; ошибки DNS и TLS — сразу
+  исключение. Исчерпав повторы — исключение, а скачанное остаётся в `<файл>.zip.part` (+ `.zip.part.json`): следующий
+  вызов докачивает с места обрыва, если выгрузка та же (ETag). Выгрузка пересобралась во время загрузки — загрузка
+  начинается заново (один раз). Вторая загрузка в тот же файл, пока идёт первая, — `FileException`.
+- Параллельность, повторы и лимит размера архива (2 ГиБ):
+  `GdeSlon::create($config, feedDownloader: RangedFeedDownloader::create($config, concurrency: 4, partRetries: 5))`.
+- Без расширения zlib zip-выгрузку не распаковать: `UnsupportedFormatException` сразу после первой части.
+- Ошибки: неверная ссылка — `HttpException` 404, страница вместо файла — `UnexpectedResponseException`. Секрет ссылки и
+  содержимое ответов скрыты в сообщениях, трассах, `var_dump`/`var_export` и `(array)` у `FeedUrl`;
+  `serialize(FeedUrl)` и `clone` запрещены. `FeedUrl` принимает только https.
+- Из CLI: `vendor/bin/gdeslon feed download --output=women.xml` (ссылки — из `GDESLON_FEED_URLS` через пробел, валидаторы —
+  в `women.xml.meta.json`).
 - Оценить выгрузку без кода: `vendor/bin/gdeslon feed stats women.zip` — офферы, магазины, категории, частота `param`,
   доли офферов с цветом, размером, полом и erid.
 
@@ -921,6 +949,7 @@ SDK заменяет такие значения на `***` в `responseSnippet(
 | `InMemoryCacheStore` | `CacheStore` | кэш в памяти, `all()`; `failWrites()` — запись отказывает |
 | `FakeCategoryRepository`, `FakeMerchantRepository` | порты каталога | отдают переданный снимок; `calls()`, `lastRefresh()`, `lastPublic()` |
 | `FakeProductCatalog` | `ProductCatalog` | очередь страниц-замыканий `fn (SearchCriteria $c): SearchResult`; `criteria()` |
+| `FakeFeedDownloader` | `FeedDownloader` | очередь результатов: `willDownload($xml, $validators)` (пишет XML в целевой файл), `willReturnNotModified()`, `willThrow($exception)`; `downloads()` — замаскированная ссылка, путь, валидаторы |
 | `FakeProductFeed` | `ProductFeed` | переданные офферы, категории, дата и пропуски; `FakeProductFeed::fromYml($xml)` и `fromYmlFile($path)` — разбор настоящим читателем; `traversals()` |
 | `FakeOrderRepository` | `OrderRepository` | переданные заказы на любой фильтр; `criteria()` |
 | `FakeCouponFeed` | `CouponFeed` | переданные купоны с отбором по магазинам фильтра; `criteria()` |
@@ -1017,7 +1046,8 @@ vendor/bin/gdeslon merchants --search=komus
 vendor/bin/gdeslon search платье красное --limit=20 --sort=price
 vendor/bin/gdeslon orders --days=7 --state=confirmed,paid
 vendor/bin/gdeslon coupons --active --format=json
-vendor/bin/gdeslon feed stats women.zip
+vendor/bin/gdeslon feed download --output=women.xml
+vendor/bin/gdeslon feed stats women.xml
 vendor/bin/gdeslon lost-orders submit --merchant=2573 --order-number=GS123L --order-date=2026-09-24 \
     --order-total=554.34 --attachment=receipt.pdf --dry-run
 ```

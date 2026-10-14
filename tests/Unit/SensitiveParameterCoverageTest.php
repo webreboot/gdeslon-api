@@ -12,6 +12,9 @@ use Webreboot\GdeSlon\Domain\Claims\ClaimAttachment;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaim;
 use Webreboot\GdeSlon\Domain\Claims\LostOrderClaimList;
 use Webreboot\GdeSlon\Domain\Claims\NewLostOrderClaim;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\PartResponse;
+use Webreboot\GdeSlon\Infrastructure\Feed\PartState;
 use Webreboot\GdeSlon\Domain\Claims\OrderTotal;
 use Webreboot\GdeSlon\Domain\Promo\Coupon;
 use Webreboot\GdeSlon\Domain\Sales\Conversion;
@@ -39,7 +42,7 @@ use Webreboot\GdeSlon\Testing\FakeOrderRepository;
 
 final class SensitiveParameterCoverageTest extends TestCase
 {
-    private const SECRET_TYPES = [HttpRequest::class, Config::class, Environment::class, HeaderSecret::class, PostbackRequest::class];
+    private const SECRET_TYPES = [HttpRequest::class, Config::class, Environment::class, HeaderSecret::class, PostbackRequest::class, FeedUrl::class, PartResponse::class, PartState::class];
 
     private const SECRET_NAMES = '~^(?:token|apiToken|apiKey|userId|secret|secrets|password|authorization)$~i';
 

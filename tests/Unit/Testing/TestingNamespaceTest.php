@@ -14,6 +14,7 @@ use Webreboot\GdeSlon\Domain\Promo\CouponFeed;
 use Webreboot\GdeSlon\Domain\Sales\OrderRepository;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
 use Webreboot\GdeSlon\Infrastructure\Cache\CacheStore;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedDownloader;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 
 final class TestingNamespaceTest extends TestCase
@@ -24,6 +25,7 @@ final class TestingNamespaceTest extends TestCase
         'InMemoryCacheStore' => CacheStore::class,
         'FakeProductCatalog' => ProductCatalog::class,
         'FakeProductFeed' => ProductFeed::class,
+        'FakeFeedDownloader' => FeedDownloader::class,
         'FakeCategoryRepository' => CategoryRepository::class,
         'FakeMerchantRepository' => MerchantRepository::class,
         'FakeOrderRepository' => OrderRepository::class,

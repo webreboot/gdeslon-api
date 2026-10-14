@@ -144,6 +144,62 @@ if ($path === '/ranged') {
     return true;
 }
 
+if (str_starts_with($path, '/feed/')) {
+    require dirname(__DIR__, 3) . '/vendor/autoload.php';
+    $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+
+    if ($path === '/feed/echo.zip') {
+        $body = json_encode($headers, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        http_response_code(206);
+        header(sprintf('Content-Range: bytes 0-%d/%d', strlen($body) - 1, strlen($body)));
+        echo $body;
+
+        return true;
+    }
+
+    $body = (new \Webreboot\GdeSlon\Tests\Support\ZipBuilder())
+        ->add('a1b2c3secret.xml', (string) file_get_contents(dirname(__DIR__, 2) . '/Fixtures/feeds/feed.xml'), \Webreboot\GdeSlon\Tests\Support\ZipBuilder::STORED)
+        ->build();
+    $total = strlen($body);
+    $etag = '"feed-' . substr(md5($body), 0, 8) . '"';
+    $lastModified = 'Wed, 14 Oct 2026 09:48:14 GMT';
+    header('Content-Type: application/zip');
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . $lastModified);
+    header('Accept-Ranges: bytes');
+
+    if (($headers['if-none-match'] ?? null) === $etag || (!isset($headers['if-none-match']) && ($headers['if-modified-since'] ?? null) === $lastModified)) {
+        http_response_code(304);
+
+        return true;
+    }
+    $ifRange = $headers['if-range'] ?? null;
+    $range = $headers['range'] ?? '';
+    $rangeHonoured = $path === '/feed/data.zip' && ($ifRange === null || $ifRange === $etag || $ifRange === $lastModified);
+    if ($rangeHonoured && is_string($range) && preg_match('~^bytes=(\d+)-(\d+)$~', $range, $match) === 1) {
+        $start = (int) $match[1];
+        if ($start >= $total) {
+            http_response_code(416);
+            header('Content-Range: bytes */' . $total);
+
+            return true;
+        }
+        $end = min((int) $match[2], $total - 1);
+        http_response_code(206);
+        header(sprintf('Content-Range: bytes %d-%d/%d', $start, $end, $total));
+        header('Content-Length: ' . ($end - $start + 1));
+        echo substr($body, $start, $end - $start + 1);
+
+        return true;
+    }
+    if ($path === '/feed/data.zip' || $path === '/feed/norange.zip') {
+        header('Content-Length: ' . $total);
+        echo $body;
+
+        return true;
+    }
+}
+
 if ($path === '/redirect') {
     header('Location: /json', true, 302);
 

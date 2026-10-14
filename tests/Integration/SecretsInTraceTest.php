@@ -25,6 +25,9 @@ use Webreboot\GdeSlon\Infrastructure\Api\Claims\HttpLostOrderClaims;
 use Webreboot\GdeSlon\Infrastructure\Api\Promo\HttpCouponFeed;
 use Webreboot\GdeSlon\Infrastructure\Api\Sales\HttpOrderRepository;
 use Webreboot\GdeSlon\Infrastructure\Cache\CacheStore;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\PartResponse;
+use Webreboot\GdeSlon\Infrastructure\Feed\RangedFeedDownloader;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpRequest;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpResponse;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
@@ -35,8 +38,10 @@ use Webreboot\GdeSlon\Interface\Postback\PostbackReceiver;
 use Webreboot\GdeSlon\Testing\FakeHttpTransport;
 use Webreboot\GdeSlon\Testing\FrozenClock;
 use Webreboot\GdeSlon\Testing\InMemoryCacheStore;
+use Webreboot\GdeSlon\Tests\Support\FakeFeedHost;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
 use Webreboot\GdeSlon\Tests\Support\TraceSecrets;
+use Webreboot\GdeSlon\Tests\Support\ZipBuilder;
 
 final class SecretsInTraceTest extends TestCase
 {
@@ -45,6 +50,10 @@ final class SecretsInTraceTest extends TestCase
     private const TOKEN = '0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e0a1b2c3d4e';
 
     private const USER_ID = '1234';
+
+    private const FEED_SECRET = 'Zk3feedSecret0123456789abcdef';
+
+    private const ENTRY_SECRET = 'EntrySecretQx7ab3ZpW9mK2vT5nR8yL1cF4hJ6d';
 
     private const API_KEY = 'test-api-key-0123';
 
@@ -399,6 +408,55 @@ final class SecretsInTraceTest extends TestCase
         proc_close($process);
 
         self::assertSame(InvalidArgumentException::class . ' Config.php', trim($output), 'исключение пакета, место — __sleep()');
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(FakeFeedHost): FakeFeedHost, class-string<\Throwable>}>
+     */
+    public static function feedFailures(): iterable
+    {
+        $page = 'Forbidden: /uploads/exports/' . self::FEED_SECRET . '.zip';
+        yield '404' => [static fn (FakeFeedHost $h) => $h->failAt(0, 404), HttpException::class];
+        yield '403 со страницей, повторяющей путь' => [static fn (FakeFeedHost $h) => $h->override(1, new PartResponse(403, [], $page)), AuthenticationException::class];
+        yield '503 со страницей после повторов' => [static fn (FakeFeedHost $h) => $h->override(1, new PartResponse(503, [], $page))->override(2, new PartResponse(503, [], $page)), HttpException::class];
+        yield '500 части после повторов' => [static fn (FakeFeedHost $h) => $h->failAt(1024, 500, 10), HttpException::class];
+        yield 'не выгрузка' => [static fn (FakeFeedHost $h) => $h->override(1, new PartResponse(206, ['Content-Range' => 'bytes 0-9/10'], '<html><b>x')), UnexpectedResponseException::class];
+        $short = static fn (): PartResponse => new PartResponse(206, ['ETag' => '"e"', 'Content-Range' => 'bytes 0-1023/4400'], substr(self::feedZip(), 0, 500));
+        yield 'короткая первая часть с именем записи' => [static fn (FakeFeedHost $h) => $h->override(1, $short())->override(2, $short()), UnexpectedResponseException::class];
+        $last = static fn (): PartResponse => new PartResponse(206, ['Content-Range' => 'bytes 0-99/' . strlen(self::feedZip())], substr(self::feedZip(), -100));
+        yield 'неверный Content-Range последней части' => [static fn (FakeFeedHost $h) => $h->override(5, $last()), UnexpectedResponseException::class];
+    }
+
+    private static function feedZip(): string
+    {
+        return (new ZipBuilder())->add(self::ENTRY_SECRET . '.xml', str_repeat('<yml_catalog/>', 300), ZipBuilder::STORED)->build();
+    }
+
+    /**
+     * @param \Closure(FakeFeedHost): FakeFeedHost $host
+     * @param class-string<\Throwable>             $expected
+     */
+    #[DataProvider('feedFailures')]
+    public function testFeedUrlSecretInDownloadTrace(\Closure $host, string $expected): void
+    {
+        self::requireSensitiveParameter();
+        $dir = sys_get_temp_dir() . '/gdeslon-trace-feed-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        $gdeslon = new GdeSlon(new FakeHttpTransport(), feedDownloader: new RangedFeedDownloader($host(new FakeFeedHost(self::feedZip())), chunkSize: 1024, partRetries: 1, sleep: static function (int $microseconds): void {
+        }));
+
+        try {
+            $e = self::catchWithTraceArgs(
+                static fn () => $gdeslon->downloadFeed(FeedUrl::fromString('https://export.gdeslon.ru/uploads/exports/' . self::FEED_SECRET . '.zip'), $dir . '/feed.xml'),
+                $expected,
+            );
+        } finally {
+            array_map('unlink', array_filter(glob($dir . '/{,.}*', GLOB_BRACE) ?: [], 'is_file'));
+            rmdir($dir);
+        }
+
+        self::assertTraceHidesSecrets($e, self::FEED_SECRET, self::ENTRY_SECRET);
+        self::assertSerializedTraceHidesSecrets($e, self::FEED_SECRET, self::ENTRY_SECRET);
     }
 
     /**

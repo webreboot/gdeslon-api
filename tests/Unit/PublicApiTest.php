@@ -13,6 +13,8 @@ use Webreboot\GdeSlon\Domain\Catalog\PictureSource;
 use Webreboot\GdeSlon\Domain\Catalog\ProductFeed;
 use Webreboot\GdeSlon\Domain\Shared\Clock;
 use Webreboot\GdeSlon\GdeSlon;
+use Webreboot\GdeSlon\Infrastructure\Feed\FeedUrl;
+use Webreboot\GdeSlon\Infrastructure\Feed\RangedFeedDownloader;
 use Webreboot\GdeSlon\Infrastructure\Clock\SystemClock;
 use Webreboot\GdeSlon\Infrastructure\Http\HttpTransport;
 use Webreboot\GdeSlon\Infrastructure\Http\TransportFactory;
@@ -207,22 +209,31 @@ final class PublicApiTest extends TestCase
     {
         self::assertTrue((new \ReflectionClass(ProductFeed::class))->isInterface());
         self::assertTrue((new \ReflectionClass(OfferParam::class))->isFinal());
-        foreach (['openFeed', 'unpackFeed'] as $method) {
+        foreach (['openFeed', 'unpackFeed', 'downloadFeed'] as $method) {
             self::assertTrue((new \ReflectionMethod(GdeSlon::class, $method))->isPublic(), $method);
         }
         foreach (['params', 'param', 'paramValues'] as $method) {
             self::assertTrue((new \ReflectionMethod(Offer::class, $method))->isPublic(), $method);
         }
+        $downloader = new \ReflectionClass(RangedFeedDownloader::class);
+        self::assertStringNotContainsString('@internal', (string) $downloader->getDocComment());
+        self::assertTrue($downloader->getMethod('create')->isPublic());
+        self::assertStringNotContainsString('@internal', (string) $downloader->getMethod('create')->getDocComment());
+        self::assertSame(['config', 'concurrency', 'partRetries', 'maxBytes'], array_map(static fn (\ReflectionParameter $p): string => $p->name, $downloader->getMethod('create')->getParameters()));
+        self::assertStringContainsString('@internal', (string) (new \ReflectionMethod(FeedUrl::class, 'secrets'))->getDocComment());
+        $create = (new \ReflectionMethod(GdeSlon::class, 'create'))->getParameters();
+        self::assertSame('feedDownloader', $create[count($create) - 1]->getName());
+
         $parameters = (new \ReflectionMethod(Offer::class, '__construct'))->getParameters();
         self::assertSame('params', $parameters[count($parameters) - 1]->getName(), 'новый параметр конструктора Offer — последним');
 
         $feeds = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/README.md'), '### Товарные выгрузки');
-        foreach (['unpackFeed(', 'openFeed(', 'param(', 'paramValues(', 'key()', 'skippedCount()', 'UnsupportedFormatException', 'feed stats', 'секрет'] as $expected) {
+        foreach (['downloadFeed(', 'FeedUrl::fromString(', 'isNotModified()', 'validators()->toArray()', '.zip.part', 'feed download', 'unpackFeed(', 'openFeed(', 'param(', 'paramValues(', 'key()', 'skippedCount()', 'UnsupportedFormatException', 'feed stats', 'секрет'] as $expected) {
             self::assertStringContainsString($expected, $feeds);
         }
 
         $unreleased = self::section((string) file_get_contents(dirname(__DIR__, 2) . '/CHANGELOG.md'), '## [Unreleased]');
-        foreach (['`GdeSlon::openFeed($path)`', '`GdeSlon::unpackFeed($zip, $xml)`', '`OfferParam`', '`FakeProductFeed`', '`gdeslon feed stats <FILE>`'] as $expected) {
+        foreach (['`GdeSlon::downloadFeed(FeedUrl $url, $xmlPath, ?FeedValidators $previous)`', '`FakeFeedDownloader`', '`gdeslon feed download [--feed=N] [--output=FILE]`', '`GdeSlon::openFeed($path)`', '`GdeSlon::unpackFeed($zip, $xml)`', '`OfferParam`', '`FakeProductFeed`', '`gdeslon feed stats <FILE>`'] as $expected) {
             self::assertStringContainsString($expected, $unreleased);
         }
     }

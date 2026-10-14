@@ -7,10 +7,13 @@ namespace Webreboot\GdeSlon\Tests\Integration\Interface\Cli;
 use PHPUnit\Framework\TestCase;
 use Webreboot\GdeSlon\Tests\Support\CliTester;
 use Webreboot\GdeSlon\Tests\Support\Fixtures;
+use Webreboot\GdeSlon\Tests\Support\LocalHttpServer;
 use Webreboot\GdeSlon\Tests\Support\ZipBuilder;
 
 final class FeedCommandsTest extends TestCase
 {
+    private const SECRET = 'Zk3secretSecretSecret0123456789';
+
     private string $dir;
 
     protected function setUp(): void
@@ -106,6 +109,62 @@ final class FeedCommandsTest extends TestCase
         self::assertSame(1, $cli->run(['feed', 'stats', $this->dir . '/login.html']));
         self::assertStringStartsWith('Ошибка: Выгрузка', $cli->stderr);
         self::assertSame('', $cli->stdout);
+    }
+
+    public function testDownloadThenNotModified(): void
+    {
+        $server = LocalHttpServer::start();
+        $env = ['GDESLON_FEED_URLS' => ' ' . $server->url('/feed/data.zip') . "\n  " . $server->url('/feed/missing-' . self::SECRET . '.zip') . ' '];
+
+        try {
+            $cli = new CliTester();
+            self::assertSame(0, $cli->run(['feed', 'download', '--output=' . $this->dir . '/women.xml'], $env), $cli->stderr);
+            self::assertSame(Fixtures::read('feeds/feed.xml'), file_get_contents($this->dir . '/women.xml'));
+            self::assertStringContainsString('Скачано', $cli->stdout);
+            self::assertStringContainsString('women.xml', $cli->stdout);
+            $meta = json_decode((string) file_get_contents($this->dir . '/women.xml.meta.json'), true, 512, JSON_THROW_ON_ERROR);
+            self::assertIsArray($meta);
+            self::assertIsString($meta['etag']);
+            self::assertStringStartsWith('"feed-', $meta['etag']);
+            self::assertStringNotContainsString('data.zip', $cli->stdout . $cli->stderr);
+
+            $cli = new CliTester();
+            self::assertSame(0, $cli->run(['feed', 'download', '--output=' . $this->dir . '/women.xml', '--format=json'], $env), $cli->stderr);
+            $data = json_decode($cli->stdout, true, 512, JSON_THROW_ON_ERROR);
+            self::assertIsArray($data);
+            self::assertSame('not_modified', $data['status']);
+            self::assertSame($this->dir . '/women.xml', $data['path']);
+            self::assertSame(strlen(Fixtures::read('feeds/feed.xml')), $data['bytes']);
+            self::assertSame($meta['etag'], $data['etag']);
+
+            $cli = new CliTester();
+            self::assertSame(1, $cli->run(['feed', 'download', '--feed=2', '--output=' . $this->dir . '/other.xml'], $env));
+            self::assertStringContainsString('HTTP 404', $cli->stderr);
+            self::assertStringNotContainsString(self::SECRET, $cli->stdout . $cli->stderr);
+            self::assertFileDoesNotExist($this->dir . '/other.xml');
+        } finally {
+            $server->stop();
+        }
+    }
+
+    public function testDownloadUsageAndMissingUrls(): void
+    {
+        $cli = new CliTester();
+        self::assertSame(3, $cli->run(['feed', 'download', '--output=' . $this->dir . '/women.xml']));
+        self::assertStringContainsString('GDESLON_FEED_URLS', $cli->stderr);
+        self::assertStringContainsString('https://gdeslon.ru/export_files/', $cli->stderr);
+
+        $env = ['GDESLON_FEED_URLS' => 'https://export.gdeslon.ru/uploads/exports/' . self::SECRET . '.zip'];
+        $cli = new CliTester();
+        self::assertSame(2, $cli->run(['feed', 'download', '--feed=2', '--output=' . $this->dir . '/women.xml'], $env));
+        self::assertStringContainsString('ссылок в GDESLON_FEED_URLS: 1', $cli->stderr);
+
+        $cli = new CliTester();
+        self::assertSame(2, $cli->run(['feed', 'download', 'лишний'], $env));
+
+        $cli = new CliTester();
+        self::assertSame(2, $cli->run(['feed', 'download', '--output=' . $this->dir . '/women.xml'], ['GDESLON_FEED_URLS' => 'http://export.gdeslon.ru/' . self::SECRET . '.zip']));
+        self::assertStringNotContainsString(self::SECRET, $cli->stdout . $cli->stderr);
     }
 
     /**

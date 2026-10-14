@@ -5,9 +5,21 @@
 
 ## [Unreleased]
 
-Чтение товарных выгрузок (фидов) из кабинета: офферы с параметрами `param` и категории без обхода поиска.
+Товарные выгрузки (фиды) из кабинета: загрузка частями с докачкой и условным запросом, чтение офферов с параметрами
+`param` и категорий без обхода поиска.
 
 ### Добавлено
+
+- `GdeSlon::downloadFeed(FeedUrl $url, $xmlPath, ?FeedValidators $previous)` — загрузка выгрузки частями `Range`
+  (по `Config::rangeChunkSize`, 8 параллельно, каждая в новом соединении), с повтором части, докачкой из
+  `<файл>.zip.part` и распаковкой zip; первая часть — условный запрос, 304 → `FeedDownload::isNotModified()`.
+  `FeedUrl` (секрет: `masked()`, не сериализуется), `FeedValidators` (`toArray()`/`fromArray()`), `FeedDownload`,
+  `FeedDownloadStatus`, порт `FeedDownloader` — новый необязательный параметр конструктора `GdeSlon` и
+  `GdeSlon::create()`, последним. `RangedFeedDownloader::create($config, concurrency:, partRetries:, maxBytes:)` —
+  загрузчик с настройками; блокировка от второй загрузки в тот же файл.
+- `FakeFeedDownloader` в `Webreboot\GdeSlon\Testing`.
+- CLI `gdeslon feed download [--feed=N] [--output=FILE]` — ссылки из `GDESLON_FEED_URLS` (через пробел), валидаторы в
+  `FILE.meta.json`.
 
 - `GdeSlon::openFeed($path)` — потоковое чтение распакованной YML-выгрузки: порт `ProductFeed` с `generatedAt()`,
   `categories()` (`CategoryTree`), `offers()` (генератор `Offer`, память не растёт с размером файла), `skipped()` (до

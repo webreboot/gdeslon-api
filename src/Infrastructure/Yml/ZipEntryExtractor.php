@@ -36,6 +36,11 @@ final class ZipEntryExtractor
         $this->zlibAvailable = $zlibAvailable ?? extension_loaded('zlib');
     }
 
+    public function canInflate(): bool
+    {
+        return $this->zlibAvailable;
+    }
+
     public function extract(string $zipPath, string $targetPath): int
     {
         if (str_contains($zipPath, '://') || !is_file($zipPath) || !is_readable($zipPath)) {
